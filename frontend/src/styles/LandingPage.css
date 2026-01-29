@@ -1,9 +1,9 @@
 .landing-container {
   min-height: 100vh;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
-  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+  background: #fbf2eb;
 }
 
 .landing-content {
@@ -16,13 +16,19 @@
   padding: 2rem;
 }
 
-.logo h1 {
-  font-size: 3.5rem;
-  font-weight: 900;
-  letter-spacing: 2px;
-  color: #1a1a1a;
-  margin: 0;
-  text-align: center;
+.logo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+.logo img {
+  width: 400px;
+  height: 400px;
+  object-fit: contain;
+  margin-top: -50px;
+  margin-bottom: -150px;
 }
 
 .search-section {

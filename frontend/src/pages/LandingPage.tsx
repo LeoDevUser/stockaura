@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import '../styles/LandingPage.css'
+import logo from '../assets/logo.png'
 
 interface Suggestion {
   ticker: string
@@ -10,7 +11,7 @@ interface Suggestion {
 export default function LandingPage() {
   const [input, setInput] = useState<string>('')
   const [suggestions, setSuggestions] = useState<Suggestion[]>([])
-  const [loading, setLoading] = useState<boolean>(false)
+  const [_, setLoading] = useState<boolean>(false)
   const navigate = useNavigate()
 
   const handleSearch = async (query: string) => {
@@ -56,7 +57,8 @@ export default function LandingPage() {
     <div className="landing-container">
       <div className="landing-content">
         <div className="logo">
-          <h1>STOCKAURA</h1>
+		  <img src={logo} alt="STOCKAURA LOGO"/>
+		  {/*<h1>STOCKAURA</h1>*/}
         </div>
 
         <div className="search-section">
