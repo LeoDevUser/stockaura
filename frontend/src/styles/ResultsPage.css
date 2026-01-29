@@ -1,0 +1,17 @@
+.results-container {
+  min-height: 100vh;
+  padding: 2rem;
+  background: #f5f7fa;
+}
+
+.results-container h1 {
+  color: #1a1a1a;
+  margin-bottom: 2rem;
+}
+
+.results-container pre {
+  background: white;
+  padding: 1rem;
+  border-radius: 8px;
+  overflow-x: auto;
+}
