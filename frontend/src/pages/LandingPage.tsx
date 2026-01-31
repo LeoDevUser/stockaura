@@ -17,7 +17,7 @@ export default function LandingPage() {
           <img src={logo} alt="STOCKAURA LOGO"/>
         </div>
 
-        <div className="search-section">
+        <div className="search-section-landing">
           <SearchBar 
             onSelect={handleNavigate} 
             placeholder="Enter a stock ticker to analyze it.." 

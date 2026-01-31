@@ -67,14 +67,14 @@ export default function ResultsPage() {
   return (
     <div className="results-page">
 	<div className='nav'>
-	  <div className='logo'>
+	  <div className='logo-dark'>
 		  <img src={logo} alt='Dark Logo'/>
 	  </div>
         <div className="ticker-info">
           <h1>{results.title || 'Undefined'}</h1>
 		  <h2>Ticker: {ticker}</h2>
         </div>
-	  <div className='search-section'>
+	  <div className='search-section-landing'>
 	  <SearchBar
 	  onSelect={handleNavigate}
 	  placeholder='Enter a stock ticker to analyze it..'/>
