@@ -5,3 +5,89 @@
 .results-page {
 	background: #25282f
 }
+
+.nav {
+	display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 5px;
+    padding: 20px;
+    align-items: start; /* Keeps sections aligned at the top */
+
+}
+
+.logo {
+	display: flex;
+	flex-direction: row;
+	align-items: flex-start;
+	justify-content: flex-start;
+}
+
+.logo img {
+	margin-top: 1px;
+	object-fit: contain;
+	width: 60%;
+	height: 60%;
+	margin-bottom: 1px
+}
+
+.ticker-info {
+	display: grid;
+	margin-left: -100px;
+	grid-template-rows: repeat(2,1fr);
+	margin-bottom: -100px
+}
+
+.ticker-info h1 {
+	display: flex;
+	flex-direction: column;
+}
+
+.ticker-info h2 {
+	display: flex;
+	flex-direction: column;
+}
+
+.search-section {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: center;
+}
+
+/* Container for the three main sections */
+.results-grid {
+    display: grid;
+    /* Creates 3 equal columns */
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+    padding: 20px;
+    align-items: start; /* Keeps sections aligned at the top */
+}
+
+/* Ensure individual sections take full width of their grid cell */
+.section {
+    background: #2b2f36; /* Slightly lighter than page background */
+    padding: 20px;
+    border-radius: 8px;
+    height: 100%; /* Optional: makes all boxes same height */
+}
+
+/* Additional Metrics row (below the grid) */
+.additional-metrics {
+    margin-top: 20px;
+    padding: 0 20px;
+}
+
+.metrics-grid {
+    display: flex;
+    flex-direction: row;
+    gap: 15px;
+    flex-wrap: wrap; /* Allows wrapping if the screen is too narrow */
+}
+
+/* Responsive adjustment for tablets/phones */
+@media (max-width: 1024px) {
+    .results-grid {
+        grid-template-columns: 1fr; /* Stack vertically on small screens */
+    }
+}

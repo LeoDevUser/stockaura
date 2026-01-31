@@ -1,7 +1,9 @@
-import { useSearchParams } from 'react-router-dom'
+import { useSearchParams, useNavigate } from 'react-router-dom'
 import { useState, useEffect } from 'react'
 import Chart from '../components/Chart'
 import '../styles/ResultsPage.css'
+import SearchBar from '../components/SearchBar'
+import logo from '../assets/logo-dark.png'
 
 interface AnalysisResult {
   ticker: string
@@ -35,6 +37,11 @@ export default function ResultsPage() {
   const [results, setResults] = useState<AnalysisResult | null>(null)
   const [loading, setLoading] = useState<boolean>(true)
   const [error, setError] = useState<string | null>(null)
+  const navigate = useNavigate()
+
+  const handleNavigate = (ticker: string) => {
+    navigate(`/results?ticker=${ticker}`)
+  }
 
   useEffect(() => {
     const fetchResults = async () => {
@@ -59,13 +66,20 @@ export default function ResultsPage() {
 
   return (
     <div className="results-page">
-      <div className="results-header">
+	<div className='nav'>
+	  <div className='logo'>
+		  <img src={logo} alt='Dark Logo'/>
+	  </div>
         <div className="ticker-info">
-          <h1>{ticker}</h1>
-          <h2>{results.title || 'Undefined'} </h2>
+          <h1>{results.title || 'Undefined'}</h1>
+		  <h2>Ticker: {ticker}</h2>
         </div>
-      </div>
-
+	  <div className='search-section'>
+	  <SearchBar
+	  onSelect={handleNavigate}
+	  placeholder='Enter a stock ticker to analyze it..'/>
+		</div>
+	</div>
       <div className="results-grid">
         {/* Left Section - Header Stats */}
         <div className="section header-stats">
