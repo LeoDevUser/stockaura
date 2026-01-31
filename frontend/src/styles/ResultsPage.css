@@ -1,22 +1,7 @@
-.results-container {
-  min-height: 100vh;
-  padding: 2rem;
-  background: black;
+.ticker-info {
+	color: #eb7d28
 }
 
-.results-container h1 {
-  color: #eb7d28;
-  margin-bottom: 2rem;
-}
-
-.results-container h2 {
-  color: #eb7d28;
-  margin-bottom: 2rem;
-}
-
-.results-container pre {
-  background: white;
-  padding: 1rem;
-  border-radius: 8px;
-  overflow-x: auto;
+.results-page {
+	background: #25282f
 }

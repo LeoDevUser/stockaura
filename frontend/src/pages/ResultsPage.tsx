@@ -62,7 +62,7 @@ export default function ResultsPage() {
       <div className="results-header">
         <div className="ticker-info">
           <h1>{ticker}</h1>
-          <h2>{results.title || 'Unknown Company'}</h2>
+          <h2>{results.title || 'Undefined'} </h2>
         </div>
       </div>
 

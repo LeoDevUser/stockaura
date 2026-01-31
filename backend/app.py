@@ -24,7 +24,11 @@ app.add_middleware(
 
 @app.get('/analyze')
 async def analyze(ticker: str, period: str = '5y', window_days: int = 5):
-    return analyze_stock(ticker,period,window_days)
+    result = analyze_stock(ticker,period,window_days)
+    #fallback to ticker data if no title provided by finance
+    if not result.get('title') and ticker.upper() in data_map:
+        result['title'] = data_map[ticker.upper()]['title']
+    return result
 
 #build trie for searching tickers
 with open('tickers.json','r') as fp:
