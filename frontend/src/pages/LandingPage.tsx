@@ -36,19 +36,15 @@ export default function LandingPage() {
   }
 
   const handleSelectTicker = (ticker: string) => {
-    const title = suggestions.find(s => s.ticker === ticker)?.title
-    navigate(`/results?ticker=${ticker}&title=${title}`)
+    navigate(`/results?ticker=${ticker}`)
   }
 
   const handleKeyDown = async (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && input.length > 0) {
       try {
-        const response = await fetch(`/api/search?q=${input.toUpperCase()}&limit=1`)
-        const data: Suggestion[] = await response.json()
-        const title = data.length > 0 ? data[0].title : 'Unknown'
-        navigate(`/results?ticker=${input.toUpperCase()}&title=${title}`)
+        navigate(`/results?ticker=${input.toUpperCase()}`)
       } catch (error) {
-        navigate(`/results?ticker=${input.toUpperCase()}&title=Unknown`)
+		  //
       }
     }
   }

@@ -51,6 +51,9 @@ def analyze_stock(ticker, period="5y", window_days=5):
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = df.columns.get_level_values(0)
 
+    yfticker = yf.Ticker(ticker)
+    title = yfticker.info.get('longName')
+    print(title)
     OHLC = df.reset_index()[['Date','Open', 'High', 'Close', 'Low']]
     OHLC['Date'] = pd.to_datetime(OHLC['Date']).dt.strftime('%Y-%m-%d')
 
@@ -75,6 +78,7 @@ def analyze_stock(ticker, period="5y", window_days=5):
         'Return': None,
         'predictability_score': 0,
         'zscore': None,
+        'title': title,
         'OHLC': OHLC.to_dict('records')
     }
 
