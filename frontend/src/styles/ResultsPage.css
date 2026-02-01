@@ -11,8 +11,12 @@
     grid-template-columns: repeat(4, 1fr);
     gap: 5px;
     padding: 20px;
-    align-items: start; /* Keeps sections aligned at the top */
+    align-items: start;
+}
 
+.search-section-landing {
+  align-self: end;
+  grid-column: span 2;
 }
 
 .logo-dark {
