@@ -86,9 +86,6 @@
   gap: 0.25rem;
 }
 
-.suggestion-item:hover {
-  background-color: #f9f9f9;
-}
 
 .suggestion-item:last-child {
   border-bottom: none;

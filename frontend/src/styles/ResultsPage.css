@@ -1,9 +1,9 @@
 .ticker-info {
-	color: #eb7d28
+	color: #eb7d28;
 }
 
 .results-page {
-	background: #25282f
+	background: #25282f;
 }
 
 .nav {
@@ -14,15 +14,36 @@
     align-items: start;
 }
 
+.home-search {
+	display: grid;
+	grid-template-rows: repeat(2,1fr);
+	grid-column: span 2;
+	width: 100%;
+}
 .search-section-landing {
-  align-self: end;
-  grid-column: span 2;
+	align-self: end;
+	grid-row: 2;
+	width: 100%;
+}
+
+.home {
+	justify-self: end;
+	align-self: end;
+	grid-row: 1;
+}
+
+.home img {
+	width: 20%;
+	height: 20%;
+	cursor: pointer;
+	display: block;
+	margin-left: auto;
 }
 
 .logo-dark {
 	display: flex;
 	flex-direction: row;
-	align-items: flex-start;
+	align-items: center;
 	justify-content: flex-start;
 }
 
@@ -31,10 +52,12 @@
 	object-fit: contain;
 	width: 60%;
 	height: 60%;
-	margin-bottom: 1px
+	margin-bottom: 1px;
+	cursor: pointer;
 }
 
 .ticker-info {
+	align-self: center;
 	display: grid;
 	margin-left: -100px;
 	grid-template-rows: repeat(2,1fr);
@@ -60,6 +83,7 @@
 
 /* Container for the three main sections */
 .results-grid {
+	color: white;
     display: grid;
     /* Creates 3 equal columns */
     grid-template-columns: repeat(3, 1fr);
@@ -78,8 +102,9 @@
 
 /* Additional Metrics row (below the grid) */
 .additional-metrics {
-    margin-top: 20px;
+    margin-top: -20px;
     padding: 0 20px;
+	color:white;
 }
 
 .metrics-grid {
@@ -87,6 +112,42 @@
     flex-direction: row;
     gap: 15px;
     flex-wrap: wrap; /* Allows wrapping if the screen is too narrow */
+}
+
+.delisted-container {
+	display: grid;
+	grid-template-rows: repeat(3,1fr);
+	place-items: center;
+	width: 100vw;
+	height: 100vh;
+	color: #eb7d28;
+	background: #25282f;
+}
+
+.delisted-error {
+	grid-row: 1;
+	font-size: 100%;
+	align-self:self-end;
+}
+
+.delisted-go-back {
+	grid-row: 3;
+	font-size: 100%;
+	align-self:self-start;
+}
+.delisted-container img {
+	grid-row: 2;
+	width: 10%;
+}
+
+.loading-page {
+	display: grid;
+	color: #eb7d28;
+	background: #25282f;
+	width: 100%;
+	height: 100vh;
+	place-items: center;
+	font-size: 300%;
 }
 
 /* Responsive adjustment for tablets/phones */

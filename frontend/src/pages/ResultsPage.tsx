@@ -4,6 +4,7 @@ import Chart from '../components/Chart'
 import '../styles/ResultsPage.css'
 import SearchBar from '../components/SearchBar'
 import logo from '../assets/logo-dark.png'
+import home from '../assets/home.png'
 
 interface AnalysisResult {
   ticker: string
@@ -36,7 +37,6 @@ export default function ResultsPage() {
   const ticker = searchParams.get('ticker')
   const [results, setResults] = useState<AnalysisResult | null>(null)
   const [loading, setLoading] = useState<boolean>(true)
-  const [error, setError] = useState<string | null>(null)
   const navigate = useNavigate()
 
   const handleNavigate = (ticker: string) => {
@@ -52,7 +52,6 @@ export default function ResultsPage() {
         const data: AnalysisResult = await response.json()
         setResults(data)
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Unknown error')
       } finally {
         setLoading(false)
       }
@@ -60,24 +59,36 @@ export default function ResultsPage() {
     fetchResults()
   }, [ticker])
 
-  if (loading) return <div className="results-container"><p>Loading...</p></div>
-  if (error) return <div className="results-container"><p>Error: {error}</p></div>
+  if (loading) return <div className="loading-page"><p>Loading...</p></div>
+  if (results?.error) return (
+	<div className="delisted-container"onClick={() => navigate('/')}>
+		<p className='delisted-error'>{results.error}</p>
+		<img src={home} alt='Landing'/>
+		<p className='delisted-go-back'>Go Back to Landing Page</p>
+	</div>
+  )
   if (!results) return <div className="results-container"><p>No results</p></div>
+	  console.log(results)
 
   return (
     <div className="results-page">
 	<div className='nav'>
 	  <div className='logo-dark'>
-		  <img src={logo} alt='Dark Logo'/>
+		  <img src={logo} alt='Dark Logo' onClick={() => navigate('/')}/>
 	  </div>
         <div className="ticker-info">
           <h1>{results.title || 'Undefined'}</h1>
 		  <h2>Ticker: {ticker}</h2>
         </div>
+		<div className='home-search'>
 	  <div className='search-section-landing'>
 	  <SearchBar
 	  onSelect={handleNavigate}
 	  placeholder='Enter a stock ticker to analyze it..'/>
+		</div>
+		<div className='home'>
+		<img src={home} alt='Landing' onClick={() => navigate('/')} />
+		</div>
 		</div>
 	</div>
       <div className="results-grid">

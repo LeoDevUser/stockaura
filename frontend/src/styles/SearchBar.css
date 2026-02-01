@@ -3,11 +3,9 @@
 }
 
 .suggestion-item.selected .suggestion-ticker {
-  background-color: #ff9500;
   color: black;
 }
 
 .suggestion-item.selected .suggestion-title {
-  background-color: #ff9500;
   color: white;
 }
