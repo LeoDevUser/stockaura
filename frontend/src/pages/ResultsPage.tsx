@@ -22,6 +22,8 @@ interface AnalysisResult {
   predictability_score: number
   zscore: number | null
   title: string
+  current: number
+  currency: string
   OHLC: Array<{
     Date: string
     Open: number
@@ -78,7 +80,7 @@ export default function ResultsPage() {
 	  </div>
         <div className="ticker-info">
           <h1>{results.title || 'Undefined'}</h1>
-		  <h2>Ticker: {ticker}</h2>
+		  <h2>Ticker: {ticker}&emsp;&emsp;{results.current} {results.currency}</h2>
         </div>
 		<div className='home-search'>
 	  <div className='search-section-landing'>

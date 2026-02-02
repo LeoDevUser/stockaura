@@ -36,6 +36,9 @@ def hurst_exponent(series, lags_min=10, lags_max=500):
     
     return H, lags, tau, poly
 
+
+exchange_to_currency = {'T': 'JPY', 'NYB': '', 'CO': 'DKK', 'L': 'GBP or GBX', 'DE': 'EUR', 'PA': 'EUR'}
+
 def analyze_stock(ticker, period="5y", window_days=5):
     try:
         df = yf.download([ticker], period=period, progress=False)
@@ -52,8 +55,12 @@ def analyze_stock(ticker, period="5y", window_days=5):
         df.columns = df.columns.get_level_values(0)
 
     yfticker = yf.Ticker(ticker)
+    tmp = ticker.split('.')
+    currency = 'USD'
+    if len(tmp) == 2:
+        currency = exchange_to_currency[tmp[1]]
     title = yfticker.info.get('longName')
-    print(title)
+    current = yfticker.info.get('currentPrice')
     OHLC = df.reset_index()[['Date','Open', 'High', 'Close', 'Low']]
     OHLC['Date'] = pd.to_datetime(OHLC['Date']).dt.strftime('%Y-%m-%d')
 
@@ -79,6 +86,8 @@ def analyze_stock(ticker, period="5y", window_days=5):
         'predictability_score': 0,
         'zscore': None,
         'title': title,
+        'current': current,
+        'currency': currency,
         'OHLC': OHLC.to_dict('records')
     }
 
