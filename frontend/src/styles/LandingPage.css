@@ -3,7 +3,7 @@
   display: flex;
   align-items: flex-start;
   justify-content: center;
-  background: #fbf2eb;
+  background: #25282f;
 }
 
 .landing-content {
@@ -21,15 +21,14 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 1rem;
 }
 
 .logo img {
-  width: 500px;
-  height: 500px;
+  width: 37vw;
+  height: 37vh;
   object-fit: contain;
-  margin-top: -100px;
-  margin-bottom: -200px;
+  margin-top: 8vh;
+  margin-bottom: -5vh;
 }
 
 .search-section-landing {
@@ -70,7 +69,7 @@
   border: 1px solid #ddd;
   border-top: none;
   border-radius: 0 0 8px 8px;
-  max-height: 300px;
+  max-height: 250px;
   overflow-y: auto;
   z-index: 10;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
@@ -80,7 +79,6 @@
   padding: 0.75rem 1.5rem;
   cursor: pointer;
   border-bottom: 1px solid #f0f0f0;
-  transition: background-color 0.2s ease;
   display: flex;
   flex-direction: column;
   gap: 0.25rem;

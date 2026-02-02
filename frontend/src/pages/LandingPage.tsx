@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import SearchBar from '../components/SearchBar'
-import logo from '../assets/logo.png'
+import logo from '../assets/logo-dark.png'
 import '../styles/LandingPage.css'
 
 export default function LandingPage() {

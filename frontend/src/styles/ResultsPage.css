@@ -140,7 +140,7 @@
 	width: 10%;
 }
 
-.loading-page {
+.loading-page, .no-results {
 	display: grid;
 	color: #eb7d28;
 	background: #25282f;

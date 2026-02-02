@@ -69,7 +69,7 @@ export default function ResultsPage() {
 		<p className='delisted-go-back'>Go Back to Landing Page</p>
 	</div>
   )
-  if (!results) return <div className="results-container"><p>No results</p></div>
+  if (!results) return <div className="no-results"><p>No results</p></div>
 	  console.log(results)
 
   return (
