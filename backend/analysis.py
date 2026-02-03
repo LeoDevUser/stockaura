@@ -478,22 +478,48 @@ def generate_trading_signal(res):
     - Trend direction determines if we go LONG or SHORT
     - Hurst & Z-EMA refine entry/exit zones
     - Death cross is implicit in trend analysis (not a veto)
+    
+    CRITICAL CHECKS (in order):
+    1. Predictability score must be >= 3 (high conviction, not participation trophy)
+    2. Regime stability must be >= 0.7 (pattern must hold out-of-sample)
+    3. Liquidity must be adequate (edge must cover friction costs)
+    4. Momentum must be strong enough (> 0.1)
+    5. Trend must be clear (UP or DOWN, not NEUTRAL)
     """
-    # Check basic tradeability
-    if res.get('predictability_score', 0) < 2:
+    
+    # CHECK 1: Predictability Score - Requires HIGH conviction (3+ out of 4 tests)
+    # Not a participation trophy! Needs strong evidence across multiple metrics
+    if res.get('predictability_score', 0) < 3:
         return 'DO_NOT_TRADE'
     
-    if res.get('regime_stability') is not None and res.get('regime_stability') < 0.6:
+    # CHECK 2: Regime Stability - Pattern must be robust out-of-sample
+    # Stricter threshold (0.7 instead of 0.6): pattern must hold up in test period
+    if res.get('regime_stability') is not None and res.get('regime_stability') < 0.7:
         return 'DO_NOT_TRADE'
     
+    # CHECK 3: Liquidity & Edge Analysis - Friction costs must not eat profits
+    # If edge doesn't cover friction, it's not tradeable no matter how good the pattern
+    if not res.get('is_liquid_enough', False):
+        return 'DO_NOT_TRADE'
+    
+    # CHECK 4: Momentum Detection - Must show persistence or reversal
     momentum = res.get('momentum_corr')
-    trend = res.get('trend_direction')
-    hurst = res.get('hurst')
-    z_ema = res.get('z_ema')
-    
-    # No momentum detected
     if momentum is None or abs(momentum) <= 0.1:
         return 'NO_CLEAR_SIGNAL'
+    
+    # CHECK 5: Trend Direction - Must be clear (UP or DOWN)
+    # NEUTRAL trends without strong momentum = skip
+    trend = res.get('trend_direction')
+    if trend not in ['UP', 'DOWN']:
+        # NEUTRAL trend or no clear direction
+        if abs(momentum) > 0.3:
+            return 'WAIT_FOR_TREND'  # Strong momentum but unclear direction
+        else:
+            return 'DO_NOT_TRADE'  # Weak signal in ambiguous market
+    
+    # Now safe to reference other fields
+    hurst = res.get('hurst')
+    z_ema = res.get('z_ema')
     
     # UPTREND ANALYSIS (momentum > 0.1 = trends continue)
     if trend == 'UP':
@@ -540,12 +566,17 @@ def generate_trading_signal(res):
             # Negative momentum in downtrend = reversal/bounce possible
             return 'WAIT_FOR_REVERSAL'
     
-    # NEUTRAL TREND (no clear direction)
+    # NEUTRAL TREND ANALYSIS (no clear direction)
+    # This is the catch-all that was previously allowing ambiguous trades
     else:
+        # Neutral trend = no clear signal for directional trading
+        # Even if momentum is strong, we can't determine if it's up or down persistence
         if abs(momentum) > 0.3:
+            # Strong momentum but no directional bias = wait for trend confirmation
             return 'WAIT_FOR_TREND'
         else:
-            return 'NO_CLEAR_SIGNAL'
+            # Weak momentum + neutral trend = not tradeable
+            return 'DO_NOT_TRADE'
 
 
 if __name__ == "__main__":

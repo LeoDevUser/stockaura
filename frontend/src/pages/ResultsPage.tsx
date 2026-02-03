@@ -105,89 +105,140 @@ export default function ResultsPage() {
     fetchResults()
   }, [ticker])
 
-  // Calculate tradeability assessment
+  /**
+   * CRITICAL FIX: Tradeability Assessment
+   * 
+   * PRINCIPLE: Single Source of Truth
+   * ─────────────────────────────────
+   * The backend's generate_trading_signal() performs ALL validation:
+   * ✓ Predictability score >= 3
+   * ✓ Regime stability >= 0.7
+   * ✓ Liquidity adequate (is_liquid_enough)
+   * ✓ Momentum detected (|r| > 0.1)
+   * ✓ Trend direction clear (UP or DOWN)
+   * 
+   * The final_signal is the OUTPUT of these checks.
+   * 
+   * The frontend should TRUST and MAP the signal, NOT re-check metrics.
+   */
   const assessTradeability = (): TradeabilityAssessment => {
     if (!results) return { tradeable: false, reason: 'No data', confidence: 'high' }
 
-    // Check 1: Out-of-sample stability (most important for model validity)
-    if (results.regime_stability !== null && results.regime_stability < 0.6) {
+    const signal = results.final_signal
+
+    // TIER 1: Explicit Rejection
+    if (signal === 'DO_NOT_TRADE') {
       return {
         tradeable: false,
-        reason: 'Pattern unstable out-of-sample (deteriorated in test period)',
+        reason: 'Pattern failed statistical validation - insufficient predictability, weak regime stability, or edge too small vs costs',
         confidence: 'high'
       }
     }
 
-    // Check 2: Predictability strength
-    if (results.predictability_score < 2) {
+    // TIER 2: No Signal
+    if (signal === 'NO_CLEAR_SIGNAL') {
       return {
         tradeable: false,
-        reason: 'Weak predictability signal (score < 2)',
+        reason: 'No detectable momentum or market structure too ambiguous',
         confidence: 'high'
       }
     }
 
-    // Check 3: Pattern hold-up (if we have OOS data)
-    if (results.momentum_corr_oos !== null && results.momentum_corr !== null) {
-      const corrDegradation = Math.abs(results.momentum_corr - results.momentum_corr_oos)
-      if (corrDegradation > 0.15) {
-        return {
-          tradeable: false,
-          reason: 'Momentum correlation degraded significantly out-of-sample',
-          confidence: 'high'
-        }
-      }
-    }
-
-    // Check 4: Liquidity assessment (critical liquidity issues only)
-    if (results.liquidity_warning !== null && results.liquidity_warning !== undefined) {
-      if (results.liquidity_warning.includes('CRITICAL') || 
-          results.liquidity_warning.includes('exceeds 5%')) {
-        return {
-          tradeable: false,
-          reason: `Liquidity issue: ${results.liquidity_warning}`,
-          confidence: 'high'
-        }
-      }
-    }
-
-    // Check 5: Edge vs Friction (profitability, not just tradeability)
-    if (results.expected_edge_pct !== null && results.total_friction_pct !== null) {
-      const edgeToFrictionRatio = results.expected_edge_pct / results.total_friction_pct
-      
-      if (edgeToFrictionRatio < 1.5) {
-        return {
-          tradeable: false,
-          reason: `Edge (${(results.expected_edge_pct).toFixed(3)}%) too small vs costs (${results.total_friction_pct.toFixed(3)}%) - ratio ${edgeToFrictionRatio.toFixed(2)}x (need >3x)`,
-          confidence: 'high'
-        }
-      }
-    }
-
-    // If we got this far: pattern shows promise
-    if (results.predictability_score >= 3 && 
-        results.regime_stability !== null && 
-        results.regime_stability > 0.7) {
+    // TIER 3: Wait for Setup (Pattern Good, Entry Not Ready)
+    if (signal === 'WAIT_FOR_TREND') {
       return {
         tradeable: true,
-        reason: 'Pattern stable and passes basic criteria - requires paper trading to validate edge',
+        reason: 'Pattern shows merit but trend direction unclear - wait for trend confirmation before entering',
         confidence: 'medium'
       }
     }
 
-    // Marginal case
-    if (results.predictability_score >= 2) {
+    if (signal === 'WAIT_PULLBACK') {
       return {
         tradeable: true,
-        reason: 'Pattern shows some promise but weak signals - high risk of false positives',
-        confidence: 'low'
+        reason: 'Uptrend confirmed but price overbought (Z > +1.0) - wait for pullback to better entry',
+        confidence: 'high'
       }
     }
 
+    if (signal === 'WAIT_SHORT_BOUNCE') {
+      return {
+        tradeable: true,
+        reason: 'Downtrend confirmed but price oversold (Z < -1.0) - wait for bounce to better short entry',
+        confidence: 'high'
+      }
+    }
+
+    if (signal === 'WAIT_OR_SHORT_BOUNCE') {
+      return {
+        tradeable: true,
+        reason: 'Uptrend weakening with momentum reversing - wait for breakdown or short the bounce',
+        confidence: 'medium'
+      }
+    }
+
+    if (signal === 'WAIT_FOR_REVERSAL') {
+      return {
+        tradeable: true,
+        reason: 'Downtrend weakening with momentum reversing - wait for reversal confirmation',
+        confidence: 'medium'
+      }
+    }
+
+    // TIER 4: Trade Now (Pattern Good + Entry Price Good)
+    if (signal === 'BUY_UPTREND') {
+      return {
+        tradeable: true,
+        reason: 'Strong uptrend with positive momentum and ideal entry level - ready to buy',
+        confidence: 'high'
+      }
+    }
+
+    if (signal === 'BUY_PULLBACK') {
+      return {
+        tradeable: true,
+        reason: 'Strong uptrend with pullback dip - excellent entry point for long position',
+        confidence: 'high'
+      }
+    }
+
+    if (signal === 'BUY_MOMENTUM') {
+      return {
+        tradeable: true,
+        reason: 'Positive momentum detected in uptrend - suitable for momentum-following entry',
+        confidence: 'medium'
+      }
+    }
+
+    if (signal === 'SHORT_DOWNTREND') {
+      return {
+        tradeable: true,
+        reason: 'Strong downtrend with persistent momentum and ideal entry level - ready to short',
+        confidence: 'high'
+      }
+    }
+
+    if (signal === 'SHORT_BOUNCES_ONLY') {
+      return {
+        tradeable: true,
+        reason: 'Downtrend detected but not strong trending regime - short bounces only, avoid holding',
+        confidence: 'medium'
+      }
+    }
+
+    if (signal === 'SHORT_MOMENTUM') {
+      return {
+        tradeable: true,
+        reason: 'Negative momentum detected in downtrend - suitable for momentum-following short',
+        confidence: 'medium'
+      }
+    }
+
+    // Fallback (should never reach if signal generation is correct)
     return {
       tradeable: false,
-      reason: 'Insufficient evidence of stable edge',
-      confidence: 'medium'
+      reason: `Unknown signal: ${signal} - rerun analysis`,
+      confidence: 'high'
     }
   }
 
@@ -363,7 +414,7 @@ export default function ResultsPage() {
         <div className="section visual-summary">
           <Chart ohlcData={results.OHLC} ticker={ticker || 'Unknown'} />
 
-          {/* Tradeability Assessment */}
+          {/* Tradeability Assessment - NOW USES FINAL_SIGNAL */}
           <div className={`tradeability-box ${tradeability.tradeable ? 'tradeable' : 'not-tradeable'}`}>
             <h4>{tradeability.tradeable ? '✓ POTENTIALLY TRADEABLE' : '✗ NOT RECOMMENDED'}</h4>
             <p><strong>Assessment:</strong> {tradeability.reason}</p>
