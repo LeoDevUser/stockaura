@@ -1,0 +1,347 @@
+.unified-recommendation {
+  background: #2b2f36;
+  padding: 1.5em;
+  border-radius: 8px;
+  border: 1px solid #444;
+  margin-bottom: 1.5em;
+}
+
+.unified-recommendation h3 {
+  margin: 0 0 1.5em 0;
+  color: #ff9500;
+  font-size: 1.1em;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.unified-recommendation h4 {
+  margin: 1em 0 0.75em 0;
+  color: #d0d0d0;
+  font-size: 0.95em;
+  font-weight: 600;
+}
+
+.unified-recommendation h5 {
+  margin: 0 0 0.5em 0;
+  color: #999;
+  font-size: 0.85em;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Main Signal */
+.signal-main {
+  background: rgba(0, 0, 0, 0.3);
+  border-left: 5px solid;
+  padding: 1.5em;
+  border-radius: 6px;
+  margin-bottom: 1.5em;
+}
+
+.signal-header {
+  display: flex;
+  align-items: center;
+  gap: 1em;
+  margin-bottom: 1em;
+}
+
+.signal-emoji {
+  font-size: 1.8em;
+  min-width: 2.5em;
+}
+
+.signal-action {
+  font-size: 1.2em;
+  font-weight: bold;
+}
+
+.signal-info {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1em;
+  margin-top: 1em;
+}
+
+.info-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5em;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+  font-size: 0.9em;
+}
+
+.info-label {
+  color: #999;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.info-value {
+  font-weight: bold;
+  padding: 0.25em 0.75em;
+  border-radius: 3px;
+  font-size: 0.9em;
+}
+
+.info-value.risk-medium {
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.1);
+}
+
+.info-value.risk-high {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.info-value.risk-medium_high {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.info-value.risk-critical {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.2);
+  font-weight: bold;
+}
+
+.info-value.conf-high {
+  color: #22c55e;
+  background: rgba(34, 197, 94, 0.1);
+}
+
+.info-value.conf-medium {
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.1);
+}
+
+.info-value.conf-low {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.1);
+}
+
+/* Analysis Breakdown */
+.analysis-breakdown {
+  background: rgba(0, 0, 0, 0.2);
+  padding: 1.25em;
+  border-radius: 6px;
+  margin-bottom: 1.5em;
+}
+
+.analysis-breakdown h4 {
+  margin-top: 0;
+  color: #ff9500;
+  font-size: 0.9em;
+}
+
+.perspective {
+  margin-bottom: 1.25em;
+  padding-bottom: 1.25em;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.perspective:last-child {
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.perspective h5 {
+  color: #d0d0d0;
+  margin: 0 0 0.5em 0;
+}
+
+.perspective p {
+  margin: 0;
+  color: #ccc;
+  font-size: 0.95em;
+  line-height: 1.5;
+}
+
+/* Signal Reasoning */
+.signal-reasoning {
+  background: rgba(0, 0, 0, 0.2);
+  padding: 1.25em;
+  border-radius: 6px;
+  margin-bottom: 1.5em;
+  border-left: 4px solid #f59e0b;
+}
+
+.signal-reasoning h4 {
+  margin-top: 0;
+  color: #f59e0b;
+}
+
+.signal-reasoning ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5em;
+}
+
+.signal-reasoning li {
+  color: #ccc;
+  padding-left: 1.5em;
+  position: relative;
+  font-size: 0.95em;
+  line-height: 1.5;
+}
+
+.signal-reasoning li:before {
+  content: '→';
+  position: absolute;
+  left: 0;
+  color: #f59e0b;
+  font-weight: bold;
+}
+
+/* Trading Action */
+.trading-action {
+  background: rgba(0, 0, 0, 0.3);
+  border-left: 4px solid;
+  padding: 1.25em;
+  border-radius: 6px;
+  margin-bottom: 1.5em;
+}
+
+.trading-action h4 {
+  margin-top: 0;
+}
+
+.action-items {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75em;
+}
+
+.action-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75em;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+  font-size: 0.9em;
+}
+
+.action-title {
+  color: #999;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  min-width: 120px;
+}
+
+.action-item span:last-child {
+  color: #ff9500;
+  font-weight: bold;
+  font-family: 'Courier New', monospace;
+}
+
+/* Disclaimer */
+.signal-disclaimer {
+  background: rgba(239, 68, 68, 0.05);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  padding: 1em;
+  border-radius: 6px;
+  font-size: 0.85em;
+  color: #ccc;
+  line-height: 1.6;
+}
+
+.signal-disclaimer p {
+  margin: 0;
+}
+
+.signal-disclaimer strong {
+  color: #ef4444;
+}
+
+/* Detailed Breakdown */
+.detailed-breakdown {
+  background: #2b2f36;
+  padding: 1.5em;
+  border-radius: 8px;
+  border: 1px solid #444;
+  margin-bottom: 1.5em;
+}
+
+.detailed-breakdown h4 {
+  margin-top: 0;
+  color: #ff9500;
+}
+
+.signal-comparison-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.25em;
+}
+
+.comparison-box {
+  background: rgba(0, 0, 0, 0.3);
+  padding: 1.25em;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.comparison-box h5 {
+  margin: 0 0 0.75em 0;
+  color: #d0d0d0;
+}
+
+.comparison-signal {
+  margin: 0 0 0.75em 0;
+  font-size: 1.25em;
+  font-weight: bold;
+  color: #ff9500;
+  min-height: 2em;
+  display: flex;
+  align-items: center;
+}
+
+.comparison-desc {
+  margin: 0;
+  font-size: 0.8em;
+  color: #666;
+  line-height: 1.4;
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+  .signal-info {
+    grid-template-columns: 1fr;
+  }
+
+  .signal-comparison-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .unified-recommendation {
+    padding: 1em;
+  }
+
+  .signal-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5em;
+  }
+
+  .signal-emoji {
+    font-size: 1.5em;
+  }
+
+  .action-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5em;
+  }
+
+  .action-title {
+    min-width: unset;
+  }
+}
