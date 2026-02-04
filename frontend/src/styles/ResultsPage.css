@@ -4,6 +4,7 @@
 
 .results-page {
 	background: #25282f;
+	min-height: 100vh; /* CRITICAL FIX: Ensure full height coverage */
 }
 
 .nav {
@@ -181,6 +182,7 @@
   background: #2b2f36;
   padding: 1.5em 2em;
   margin: 20px;
+  margin-bottom: 40px; /* CRITICAL FIX: Add extra bottom margin to prevent cutoff */
   border-radius: 8px;
   border: 1px solid #444;
 }

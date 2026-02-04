@@ -336,7 +336,16 @@ def analyze_stock(ticker, period="5y", window_days=5, account_size=10000, risk_p
                 if position_value <= account_size:
                     # User can afford this position
                     res['suggested_shares'] = whole_shares
+                    
+                    # CRITICAL FIX: Store both long and short stop loss prices
+                    # For LONGS: stop loss is BELOW current price (limit downside)
+                    # For SHORTS: stop loss is ABOVE current price (limit upside)
+                    res['stop_loss_price_long'] = float(current_price - stop_loss_dist)
+                    res['stop_loss_price_short'] = float(current_price + stop_loss_dist)
+                    
+                    # Default to long for now (will be updated after signal generation)
                     res['stop_loss_price'] = float(current_price - stop_loss_dist)
+                    
                     res['position_risk_amount'] = float(risk_amount)
                     
                     # Calculate position metrics
@@ -365,6 +374,8 @@ def analyze_stock(ticker, period="5y", window_days=5, account_size=10000, risk_p
                     # Position value exceeds account - can't afford it
                     res['suggested_shares'] = None
                     res['stop_loss_price'] = None
+                    res['stop_loss_price_long'] = None
+                    res['stop_loss_price_short'] = None
                     res['position_risk_amount'] = None
                     
                     # Calculate how many shares they can actually afford
@@ -393,6 +404,8 @@ def analyze_stock(ticker, period="5y", window_days=5, account_size=10000, risk_p
                 # Fractional shares - can't execute
                 res['suggested_shares'] = None
                 res['stop_loss_price'] = None
+                res['stop_loss_price_long'] = None
+                res['stop_loss_price_short'] = None
                 res['position_risk_amount'] = None
                 
                 # Calculate minimum account needed for 1 share
@@ -607,6 +620,24 @@ def analyze_stock(ticker, period="5y", window_days=5, account_size=10000, risk_p
 
     # GENERATE FINAL TRADING SIGNAL
     res['final_signal'] = generate_trading_signal(res)
+    
+    # ═══════════════════════════════════════════════════════════════════════
+    # CRITICAL FIX: Update stop loss based on final signal (LONG vs SHORT)
+    # ═══════════════════════════════════════════════════════════════════════
+    if res['final_signal'] and res.get('stop_loss_price_long') and res.get('stop_loss_price_short'):
+        # Determine if signal is for SHORT positions
+        short_signals = [
+            'SHORT_DOWNTREND',
+            'SHORT_BOUNCES_ONLY',
+            'SHORT_MOMENTUM'
+        ]
+        
+        if res['final_signal'] in short_signals:
+            # SHORT position: stop loss is ABOVE entry (limit upside risk)
+            res['stop_loss_price'] = res['stop_loss_price_short']
+        else:
+            # LONG position: stop loss is BELOW entry (limit downside risk)
+            res['stop_loss_price'] = res['stop_loss_price_long']
     
     # ═══════════════════════════════════════════════════════════════════════
     # CRITICAL FIX: Zero out edge if pattern failed statistical validation

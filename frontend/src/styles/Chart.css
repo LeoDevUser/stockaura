@@ -1,5 +1,5 @@
 .candlestick-chart-wrapper {
-  background: #ffffff;
+  background: #2b2f36; /* CRITICAL FIX: Changed from white (#ffffff) to dark */
   border-radius: 8px;
   padding: 20px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
@@ -8,7 +8,7 @@
 
 .chart-header {
   margin-bottom: 16px;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid #444; /* Changed from #e5e7eb to match dark theme */
   padding-bottom: 12px;
 }
 
@@ -16,7 +16,7 @@
   margin: 0;
   font-size: 16px;
   font-weight: 600;
-  color: #1f2937;
+  color: #ff9500; /* Changed from #1f2937 to match theme */
 }
 
 .candlestick-chart-container {
