@@ -129,7 +129,7 @@ export function TradingVerdict({ results, transactionCost, accountSize }: Tradin
       verdict: 'DO NOT TRADE',
       action: '❌ DO NOT TRADE',
       color: '#ef4444',
-      riskLevel: 'CRITICAL',
+      riskLevel: 'AVOID',
       confidence: 'HIGH',
       summary: 'Pattern is unreliable or unstable - avoid trading'
     }

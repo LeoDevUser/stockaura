@@ -6,6 +6,8 @@ import '../styles/ResultsPage.css'
 import SearchBar from '../components/SearchBar'
 import logo from '../assets/logo-dark.png'
 import home from '../assets/home.png'
+import Tooltip from '../components/Tooltip'
+import { tooltipContent } from '../utils/TooltipContent'
 
 export interface AnalysisResult {
   ticker: string
@@ -237,7 +239,10 @@ export default function ResultsPage() {
           
           {results.trend_direction && (
             <div className="stat trend-stat">
-              <label>Current Trend (1-Year)</label>
+              <label>
+			  Current Trend (1-Year)
+			  <Tooltip content="The stock's overall price direction over the past year. UP = gaining value, DOWN = losing value, NEUTRAL = flat. Based on comparing current price to 252 trading days ago."></Tooltip>
+			  </label>
               <div className={`trend-value trend-${results.trend_direction.toLowerCase()}`}>
                 {results.trend_direction === 'UP' && '📈 UP'}
                 {results.trend_direction === 'DOWN' && '📉 DOWN'}
@@ -250,7 +255,9 @@ export default function ResultsPage() {
           )}
 
           <div className="stat">
-            <label>Predictability Score</label>
+            <label>Predictability Score
+			<Tooltip content={tooltipContent.predictabilityScore} />
+			</label>
             <div className="score">{results.predictability_score}/4</div>
             <div className="progress-bar">
               <div
@@ -262,7 +269,9 @@ export default function ResultsPage() {
 
           {results.regime_stability !== null && (
             <div className="stat">
-              <label>Regime Stability (OOS)</label>
+              <label>Regime Stability (OOS)
+			  <Tooltip content={tooltipContent.regimeStability} />
+			  </label>
               <div className="progress-bar">
                 <div
                   className="progress-fill"
@@ -278,21 +287,27 @@ export default function ResultsPage() {
 
           {results.sharpe !== null && (
             <div className="stat">
-              <label>Sharpe Ratio</label>
+              <label>Sharpe Ratio
+			  <Tooltip content={tooltipContent.sharpeRatio}/>
+			  </label>
               <div className="value">{results.sharpe.toFixed(2)}</div>
             </div>
           )}
           
           {results.volatility !== null && (
             <div className="stat">
-              <label>Volatility (Annual)</label>
+              <label>Volatility (Annual)
+			  <Tooltip content={tooltipContent.volatility}/>
+			  </label>
               <div className="value">{results.volatility.toFixed(2)}%</div>
             </div>
           )}
           
           {results.Return !== null && (
             <div className="stat">
-              <label>Return (Annual)</label>
+              <label>Return (Annual)
+			  <Tooltip content={tooltipContent.annualReturn} />
+			  </label>
               <div className={`value ${results.Return < 0 ? 'negative' : 'positive'}`}>
                 {results.Return.toFixed(2)}%
               </div>
@@ -305,7 +320,9 @@ export default function ResultsPage() {
           <h3>Statistical Tests</h3>
 
           <div className="metric-box">
-            <label>Market Regime</label>
+            <label>Market Regime
+			<Tooltip content={tooltipContent.hurstExponent} />
+			</label>
             {results.hurst !== null && (
               <div className="gauge-container">
                 <div className="gauge">
@@ -329,8 +346,9 @@ export default function ResultsPage() {
 
           {results.adf_pvalue !== null && (
             <div className="metric-box">
-              <label>ADF Test: </label>
-              <br/>
+              <label>ADF Test: 
+			<Tooltip content={tooltipContent.adfTest} />	  
+			</label>
               <div className={`status ${results.adf_pvalue < 0.05 ? 'stationary' : 'non-stationary'}`}>
                 {results.adf_pvalue < 0.05 ? '✓ Stationary' : '✗ Non-Stationary'}
               </div>
@@ -341,7 +359,9 @@ export default function ResultsPage() {
 
           {results.lb_pvalue !== null && (
             <div className="metric-box">
-              <label>Ljung-Box Test</label>
+              <label>Ljung-Box Test
+			  <Tooltip content={tooltipContent.ljungBox} />
+			  </label>
               <div className={`status ${results.lb_pvalue < 0.05 ? 'significant' : 'insignificant'}`}>
                 {results.lb_pvalue < 0.05 ? '✓ Autocorrelated' : '✗ No Autocorrelation'}
               </div>
@@ -388,7 +408,9 @@ export default function ResultsPage() {
         <div className="metrics-grid">
           {results.momentum_corr !== null && (
             <div className="metric-card">
-              <label>Momentum Correlation</label>
+              <label>Momentum Correlation
+			  <Tooltip content={tooltipContent.momentumCorrelation} />
+			  </label>
               <div className="value">{results.momentum_corr.toFixed(3)}</div>
               {results.momentum_corr_oos !== null && (
                 <div className="value-secondary">
@@ -403,7 +425,9 @@ export default function ResultsPage() {
 
           {results.mean_rev_up !== null && (
             <div className="metric-card">
-              <label>Mean Rev After Up Move</label>
+              <label>Mean Rev After Up Move
+			  <Tooltip content={tooltipContent.meanReversion} />
+			  </label>
               <div className="value">{(results.mean_rev_up * 100).toFixed(2)}%</div>
               {results.mean_rev_up_oos !== null && (
                 <div className="value-secondary">
@@ -415,7 +439,9 @@ export default function ResultsPage() {
 
           {results.mean_rev_down !== null && (
             <div className="metric-card">
-              <label>Mean Rev After Down Move</label>
+              <label>Mean Rev After Down Move
+			  <Tooltip content={tooltipContent.meanReversion} />
+			  </label>
               <div className="value">{(results.mean_rev_down * 100).toFixed(2)}%</div>
               {results.mean_rev_down_oos !== null && (
                 <div className="value-secondary">
@@ -427,7 +453,9 @@ export default function ResultsPage() {
 
           {results.zscore !== null && (
             <div className="metric-card">
-              <label>Current Z-Score</label>
+              <label>Current Z-Score
+			  <Tooltip content={tooltipContent.zScore} />
+			  </label>
               <div className="value">{results.zscore.toFixed(3)}</div>
               <small>
                 {Math.abs(results.zscore) > 2 
