@@ -23,8 +23,20 @@ app.add_middleware(
 
 
 @app.get('/analyze')
-async def analyze(ticker: str, period: str = '5y', window_days: int = 5):
-    result = analyze_stock(ticker,period,window_days)
+async def analyze(
+    ticker: str, 
+    period: str = '5y', 
+    window_days: int = 5, 
+    account_size: int = 10000,
+    risk_per_trade: float = 0.02
+):
+    result = analyze_stock(
+        ticker, 
+        period, 
+        window_days, 
+        account_size=account_size,
+        risk_per_trade=risk_per_trade
+    )
     #fallback to ticker data if no title provided by finance
     if not result.get('title') and ticker.upper() in data_map:
         result['title'] = data_map[ticker.upper()]['title']

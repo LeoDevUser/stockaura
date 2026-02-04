@@ -143,6 +143,23 @@ def analyze_stock(ticker, period="5y", window_days=5, account_size=10000, risk_p
         currency = exchange_to_currency[tmp[1]]
     title = yfticker.info.get('longName')
     current = yfticker.info.get('currentPrice')
+    
+    # CRITICAL VALIDATION: Account must be able to afford 1 share + risk buffer
+    if current and account_size < current * (1 + risk_per_trade):
+        min_account_needed = current * (1 + risk_per_trade)
+        return {
+            "error": (
+                f"Account size (${account_size:,.2f}) is too small for this stock (${current:,.2f}/share). "
+                f"Minimum needed: ${min_account_needed:,.2f} "
+                f"(1 share + {risk_per_trade*100:.1f}% risk tolerance). "
+                f"You need ${min_account_needed - account_size:,.2f} more."
+            ),
+            "ticker": ticker,
+            "current_price": current,
+            "min_account_needed": min_account_needed,
+            "risk_per_trade": risk_per_trade
+        }
+    
     OHLC = df.reset_index()[['Date','Open', 'High', 'Close', 'Low']]
     OHLC['Date'] = pd.to_datetime(OHLC['Date']).dt.strftime('%Y-%m-%d')
 
@@ -182,6 +199,7 @@ def analyze_stock(ticker, period="5y", window_days=5, account_size=10000, risk_p
         'suggested_shares': None,
         'stop_loss_price': None,
         'position_risk_amount': None,
+        'position_size_warning': None,
         'volatility_category': None,
         'golden_cross_short': None,
         'final_signal': None,
@@ -202,6 +220,7 @@ def analyze_stock(ticker, period="5y", window_days=5, account_size=10000, risk_p
         'data_points': len(df),
         'transaction_cost': 0.001,  # 0.1% per trade
         'slippage': 0.0005,  # 0.05%
+        'risk_per_trade': risk_per_trade,  # Store user's risk tolerance
     }
 
     # Split data: 70% train, 30% test for out-of-sample validation
@@ -303,9 +322,84 @@ def analyze_stock(ticker, period="5y", window_days=5, account_size=10000, risk_p
             risk_amount = account_size * risk_per_trade
             shares_to_buy = risk_amount / stop_loss_dist
             
-            res['suggested_shares'] = int(max(1, shares_to_buy))
-            res['stop_loss_price'] = float(current_price - stop_loss_dist)
-            res['position_risk_amount'] = float(risk_amount)
+            # Whole shares only (realistic trading)
+            whole_shares = int(shares_to_buy)
+            
+            if whole_shares >= 1:
+                # Check if user can actually afford this position
+                position_value = whole_shares * current_price
+                
+                if position_value <= account_size:
+                    # User can afford this position
+                    res['suggested_shares'] = whole_shares
+                    res['stop_loss_price'] = float(current_price - stop_loss_dist)
+                    res['position_risk_amount'] = float(risk_amount)
+                    
+                    # Calculate position metrics
+                    position_pct = (position_value / account_size) * 100
+                    
+                    # Add educational notes
+                    if position_pct > 50:
+                        res['position_size_note'] = (
+                            f"Position is {position_pct:.1f}% of account. "
+                            f"High concentration risk - consider diversification (most traders use 20-30% max per position)."
+                        )
+                    elif position_pct > 30:
+                        res['position_size_note'] = (
+                            f"Position is {position_pct:.1f}% of account. "
+                            f"Moderate concentration - acceptable for high-conviction trades."
+                        )
+                    
+                    # If fractional shares were rounded down significantly
+                    if shares_to_buy >= 1.5 and whole_shares < shares_to_buy:
+                        rounded_down = shares_to_buy - whole_shares
+                        res['position_size_note'] = (
+                            f"{res.get('position_size_note', '')} "
+                            f"Note: Calculated {shares_to_buy:.2f} shares, rounded down to {whole_shares} (lost {rounded_down:.2f} shares)."
+                        ).strip()
+                else:
+                    # Position value exceeds account - can't afford it
+                    res['suggested_shares'] = None
+                    res['stop_loss_price'] = None
+                    res['position_risk_amount'] = None
+                    
+                    # Calculate how many shares they can actually afford
+                    affordable_shares = int(account_size / current_price)
+                    
+                    # Calculate what account size they'd need for this risk level
+                    min_account_for_risk = position_value
+                    
+                    if affordable_shares >= 1:
+                        res['position_size_note'] = (
+                            f"Position value (${position_value:,.0f}) exceeds account size (${account_size:,.0f}). "
+                            f"With {risk_per_trade*100:.1f}% risk tolerance, you need {shares_to_buy:.2f} shares "
+                            f"but can only afford {affordable_shares} share{'s' if affordable_shares > 1 else ''}. "
+                            f"Options: (1) Increase account to ${min_account_for_risk:,.0f}, "
+                            f"(2) Reduce risk to {(affordable_shares * stop_loss_dist / account_size)*100:.1f}%, "
+                            f"or (3) Trade a cheaper stock."
+                        )
+                    else:
+                        res['position_size_note'] = (
+                            f"Position value (${position_value:,.0f}) exceeds account size (${account_size:,.0f}). "
+                            f"Cannot afford even 1 share (${current_price:,.2f}). "
+                            f"Need minimum ${current_price * (1 + risk_per_trade):,.0f} account to trade this stock "
+                            f"with {risk_per_trade*100:.1f}% risk."
+                        )
+            else:
+                # Fractional shares - can't execute
+                res['suggested_shares'] = None
+                res['stop_loss_price'] = None
+                res['position_risk_amount'] = None
+                
+                # Calculate minimum account needed for 1 share
+                min_account_for_one_share = stop_loss_dist / risk_per_trade
+                
+                res['position_size_note'] = (
+                    f"Calculated {shares_to_buy:.4f} shares (fractional). "
+                    f"Need minimum 1 whole share to trade. "
+                    f"Minimum account size: ${min_account_for_one_share:,.0f} "
+                    f"(with {risk_per_trade*100:.1f}% risk tolerance)."
+                )
 
     # GOLDEN CROSS / DEATH CROSS
     if len(df) >= 50:
@@ -433,15 +527,17 @@ def analyze_stock(ticker, period="5y", window_days=5, account_size=10000, risk_p
     total_friction = (dynamic_slippage + res['transaction_cost']) * 2
     res['total_friction_pct'] = float(total_friction * 100)
     
-    # Calculate Expected Edge
+    # Calculate Expected Edge (PRELIMINARY - will be zeroed if pattern fails)
     # Edge = Momentum correlation strength * Volatility (annual %)
     # This represents the expected win rate * average move per trade
     if res['momentum_corr'] is not None and res['volatility'] is not None:
         expected_edge = abs(res['momentum_corr']) * res['volatility']
         res['expected_edge_pct'] = float(expected_edge)
     
-    # Is it liquid enough to trade?
+    # Is it liquid enough to trade? (PRELIMINARY - will be updated if pattern fails)
     # Rule: Position must be < 2% of daily volume AND edge > 3x friction
+    # NOTE: This is about LIQUIDITY, not AFFORDABILITY
+    # If user can't afford the position, that's separate (position_size_note handles it)
     if (res['position_size_vs_volume'] is not None and 
         res['expected_edge_pct'] is not None and
         res['total_friction_pct'] is not None):
@@ -451,6 +547,10 @@ def analyze_stock(ticker, period="5y", window_days=5, account_size=10000, risk_p
             res['expected_edge_pct'] > (res['total_friction_pct'] * 3)
         )
         res['is_liquid_enough'] = is_liquid
+    else:
+        # If we don't have position sizing (unaffordable), don't fail liquidity check
+        # The pattern might be good, just not executable with this account size
+        res['is_liquid_enough'] = True  # Don't fail pattern validation due to small account
     
     # Liquidity Quality Score
     res['liquidity_score'] = get_liquidity_score(amihud, res['position_size_vs_volume'])
@@ -465,6 +565,39 @@ def analyze_stock(ticker, period="5y", window_days=5, account_size=10000, risk_p
 
     # GENERATE FINAL TRADING SIGNAL
     res['final_signal'] = generate_trading_signal(res)
+    
+    # ═══════════════════════════════════════════════════════════════════════
+    # CRITICAL FIX: Zero out edge if pattern failed statistical validation
+    # ═══════════════════════════════════════════════════════════════════════
+    if res['final_signal'] in ['DO_NOT_TRADE', 'NO_CLEAR_SIGNAL']:
+        # Pattern is unreliable - no exploitable edge exists
+        res['expected_edge_pct'] = 0.0
+        res['is_liquid_enough'] = False
+        
+        # Update warning to explain why
+        validation_failures = []
+        
+        if res.get('predictability_score', 0) < 3:
+            validation_failures.append(f"Predictability score {res['predictability_score']}/4 (need ≥3)")
+        
+        if res.get('regime_stability') is not None and res.get('regime_stability') < 0.7:
+            validation_failures.append(f"Regime stability {res['regime_stability']*100:.0f}% (need ≥70%)")
+        
+        if res.get('lb_pvalue') is not None and res.get('lb_pvalue') >= 0.05:
+            validation_failures.append(f"No autocorrelation (Ljung-Box p={res['lb_pvalue']:.3f})")
+        
+        if res.get('adf_pvalue') is not None and res.get('adf_pvalue') >= 0.05:
+            validation_failures.append(f"Non-stationary (ADF p={res['adf_pvalue']:.3f})")
+        
+        if res.get('momentum_corr') is not None and abs(res['momentum_corr']) <= 0.1:
+            validation_failures.append(f"Weak momentum (|r|={abs(res['momentum_corr']):.3f})")
+        
+        # Set comprehensive warning
+        if validation_failures:
+            failure_msg = "; ".join(validation_failures)
+            res['liquidity_warning'] = f"Pattern failed statistical validation: {failure_msg}. No exploitable edge exists."
+        else:
+            res['liquidity_warning'] = "Pattern failed statistical validation - no exploitable edge exists"
     
     return res
 

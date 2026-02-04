@@ -4,9 +4,10 @@ import '../styles/TradingVerdict.css'
 interface TradingVerdictProps {
   results: AnalysisResult
   transactionCost: number
+  accountSize: number
 }
 
-export function TradingVerdict({ results, transactionCost }: TradingVerdictProps) {
+export function TradingVerdict({ results, transactionCost, accountSize }: TradingVerdictProps) {
   if (!results.final_signal) return null
 
   // Recalculate friction with user's transaction cost
@@ -246,30 +247,57 @@ export function TradingVerdict({ results, transactionCost }: TradingVerdictProps
       </div>
 
       {/* Position Details - Only show if tradeable or wait */}
-      {config.verdict !== 'DO NOT TRADE' && results.suggested_shares && (
+      {config.verdict !== 'DO NOT TRADE' && (
         <div className="position-details">
           <h4>Position Setup</h4>
-          <div className="position-grid">
-            <div className="position-item">
-              <label>Entry</label>
-              <span className="value">{results.suggested_shares} shares @ ${results.current?.toFixed(2)}</span>
-              <small>Position: ${(results.suggested_shares * (results.current || 0)).toFixed(2)}</small>
+          
+          {results.suggested_shares ? (
+            <>
+              <div className="position-grid">
+                <div className="position-item">
+                  <label>Entry</label>
+                  <span className="value">{results.suggested_shares} shares @ ${results.current?.toFixed(2)}</span>
+                  <small>Position: ${(results.suggested_shares * (results.current || 0)).toFixed(2)}</small>
+                </div>
+                <div className="position-item">
+                  <label>Stop Loss</label>
+                  <span className="value" style={{ color: '#ef4444' }}>
+                    ${results.stop_loss_price?.toFixed(2)}
+                  </span>
+                  <small>
+                    Risk: {(Math.abs((results.current || 0) - (results.stop_loss_price || 0)) / (results.current || 1) * 100).toFixed(2)}%
+                  </small>
+                </div>
+                <div className="position-item">
+                  <label>Risk Amount</label>
+                  <span className="value">${results.position_risk_amount?.toFixed(2)}</span>
+                  <small>{(results.risk_per_trade * 100).toFixed(1)}% of ${accountSize.toLocaleString()} account</small>
+                </div>
+              </div>
+              
+              {results.position_size_note && (
+                <div className="position-note">
+                  <p style={{ color: '#f59e0b', fontSize: '0.9em', marginTop: '1em', lineHeight: '1.5' }}>
+                    💡 {results.position_size_note}
+                  </p>
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="position-warning">
+              <p style={{ color: '#ef4444', margin: '1em 0', fontSize: '1.1em' }}>
+                <strong>⚠ Cannot Execute Position</strong>
+              </p>
+              {results.position_size_note && (
+                <p style={{ color: '#d0d0d0', fontSize: '0.95em', lineHeight: '1.6', marginTop: '0.75em' }}>
+                  {results.position_size_note}
+                </p>
+              )}
+              <p style={{ color: '#999', fontSize: '0.85em', marginTop: '1em', fontStyle: 'italic' }}>
+                Note: The trading pattern itself is valid. The issue is your account size relative to this stock's price and your risk tolerance.
+              </p>
             </div>
-            <div className="position-item">
-              <label>Stop Loss</label>
-              <span className="value" style={{ color: '#ef4444' }}>
-                ${results.stop_loss_price?.toFixed(2)}
-              </span>
-              <small>
-                Risk: {(Math.abs((results.current || 0) - (results.stop_loss_price || 0)) / (results.current || 1) * 100).toFixed(2)}%
-              </small>
-            </div>
-            <div className="position-item">
-              <label>Risk Amount</label>
-              <span className="value">${results.position_risk_amount?.toFixed(2)}</span>
-              <small>2% of $10,000 account</small>
-            </div>
-          </div>
+          )}
         </div>
       )}
 

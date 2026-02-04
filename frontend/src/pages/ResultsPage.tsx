@@ -45,6 +45,10 @@ export interface AnalysisResult {
   suggested_shares: number | null
   stop_loss_price: number | null
   position_risk_amount: number | null
+  position_size_note: string | null
+  risk_per_trade: number
+  min_account_needed: number | null
+  current_price: number | null
   avg_daily_volume: number | null
   amihud_illiquidity: number | null
   liquidity_score: string | null
@@ -70,18 +74,42 @@ export default function ResultsPage() {
   const [results, setResults] = useState<AnalysisResult | null>(null)
   const [loading, setLoading] = useState<boolean>(true)
   const [transactionCost, setTransactionCost] = useState<number>(0.001) // Default 0.1%
+  const [accountSize, setAccountSize] = useState<number>(10000) // Default $10,000
+  const [riskTolerance, setRiskTolerance] = useState<number>(2) // Default 2%
+  const [debouncedAccountSize, setDebouncedAccountSize] = useState<number>(10000) // Debounced value
+  const [debouncedRiskTolerance, setDebouncedRiskTolerance] = useState<number>(2) // Debounced value
   const navigate = useNavigate()
 
   const handleNavigate = (ticker: string) => {
     navigate(`/results?ticker=${ticker}`)
   }
 
+  // Debounce account size changes (wait 800ms after user stops typing)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedAccountSize(accountSize)
+    }, 800)
+
+    return () => clearTimeout(timer)
+  }, [accountSize])
+
+  // Debounce risk tolerance changes (wait 800ms after user stops typing)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedRiskTolerance(riskTolerance)
+    }, 800)
+
+    return () => clearTimeout(timer)
+  }, [riskTolerance])
+
   useEffect(() => {
     const fetchResults = async () => {
       if (!ticker) return
       try {
         setLoading(true)
-        const response = await fetch(`/api/analyze?ticker=${ticker}&period=5y&window_days=5`)
+        const response = await fetch(
+          `/api/analyze?ticker=${ticker}&period=5y&window_days=5&account_size=${debouncedAccountSize}&risk_per_trade=${debouncedRiskTolerance / 100}`
+        )
         const data: AnalysisResult = await response.json()
         setResults(data)
       } catch (err) {
@@ -91,7 +119,7 @@ export default function ResultsPage() {
       }
     }
     fetchResults()
-  }, [ticker])
+  }, [ticker, debouncedAccountSize, debouncedRiskTolerance])
 
   // Determine market regime description
   const getRegimeDescription = (): string => {
@@ -137,22 +165,67 @@ export default function ResultsPage() {
         </div>
       </div>
 
-      {/* Transaction Cost Input */}
-      <div className="transaction-cost-input">
-        <label>
-          <span>Transaction Cost (per trade):</span>
-          <input
-            type="number"
-            value={(transactionCost * 100).toFixed(3)}
-            onChange={(e) => setTransactionCost(parseFloat(e.target.value) / 100)}
-            step={0.001}
-            min={0}
-          />
-          <span>%</span>
-        </label>
-        <small>
-          Common values: Interactive Brokers $0.005 (0.5%), Robinhood $0 (0%), Traditional broker 0.1-1%
-        </small>
+      {/* Trading Parameters Input */}
+      <div className="trading-parameters-input">
+        <div className="parameter-group">
+          <label>
+            <span>Account Size:</span>
+            <input
+              type="number"
+              value={accountSize}
+              onChange={(e) => setAccountSize(parseFloat(e.target.value) || 10000)}
+              step={1000}
+              min={1}
+            />
+            <span>$</span>
+          </label>
+          <small>
+            Total portfolio value for position sizing
+            {accountSize !== debouncedAccountSize && (
+              <span style={{ color: '#f59e0b', marginLeft: '0.5em' }}>
+                ⏳ Updating...
+              </span>
+            )}
+          </small>
+        </div>
+
+        <div className="parameter-group">
+          <label>
+            <span>Risk Tolerance:</span>
+            <input
+              type="number"
+              value={riskTolerance}
+              onChange={(e) => setRiskTolerance(parseFloat(e.target.value) || 2)}
+              step={0.5}
+              min={0.1}
+              max={100}
+            />
+            <span>%</span>
+          </label>
+          <small>
+            Max loss per trade (1% = conservative, 100% = yolo)
+            {riskTolerance !== debouncedRiskTolerance && (
+              <span style={{ color: '#f59e0b', marginLeft: '0.5em' }}>
+                ⏳ Updating...
+              </span>
+            )}
+          </small>
+        </div>
+        
+        <div className="parameter-group">
+          <label>
+            <span>Transaction Cost:</span>
+            <input
+              type="number"
+              value={(transactionCost * 100).toFixed(3)}
+              onChange={(e) => setTransactionCost(parseFloat(e.target.value) / 100)}
+              step={0.001}
+              min={0}
+            />
+            <span>%</span>
+          </label>
+          <small>Per trade commission (IB $0.005, Robinhood $0, Traditional 0.1-1%)</small>
+        </div>
       </div>
 
       {/* Main Results Grid */}
@@ -305,7 +378,7 @@ export default function ResultsPage() {
 
       {/* UNIFIED TRADING VERDICT */}
       <div className="trading-verdict-section">
-        <TradingVerdict results={results} transactionCost={transactionCost} />
+        <TradingVerdict results={results} transactionCost={transactionCost} accountSize={accountSize} />
       </div>
 
       {/* DETAILED METRICS SECTION (Collapsible) */}
