@@ -2,7 +2,6 @@ import yfinance as yf
 import numpy as np
 from statsmodels.stats.diagnostic import acorr_ljungbox
 from statsmodels.tsa.stattools import adfuller
-import matplotlib.pyplot as plt
 import pandas as pd
 
 def hurst_exponent(series, lags_min=10, lags_max=500):
@@ -212,6 +211,8 @@ def analyze_stock(ticker, period="5y", window_days=5, account_size=10000, risk_p
         'total_friction_pct': None,
         'expected_edge_pct': None,
         'is_liquid_enough': None,
+        'liquidity_failed': False,  # True = position too large for market, False = pattern issue
+        'calculated_shares': None,  # Shares before affordability check (for liquidity analysis)
         'liquidity_warning': None,
         'title': title,
         'current': current,
@@ -322,6 +323,9 @@ def analyze_stock(ticker, period="5y", window_days=5, account_size=10000, risk_p
             risk_amount = account_size * risk_per_trade
             shares_to_buy = risk_amount / stop_loss_dist
             
+            # Store calculated shares for liquidity analysis (before rounding/affordability)
+            res['calculated_shares'] = shares_to_buy
+            
             # Whole shares only (realistic trading)
             whole_shares = int(shares_to_buy)
             
@@ -372,7 +376,7 @@ def analyze_stock(ticker, period="5y", window_days=5, account_size=10000, risk_p
                     if affordable_shares >= 1:
                         res['position_size_note'] = (
                             f"Position value (${position_value:,.0f}) exceeds account size (${account_size:,.0f}). "
-                            f"With {risk_per_trade*100:.1f}% risk tolerance, you need {shares_to_buy:.2f} shares "
+                            f"With {risk_per_trade*100:.1f}% risk tolerance, you need ${shares_to_buy:.2f} shares "
                             f"but can only afford {affordable_shares} share{'s' if affordable_shares > 1 else ''}. "
                             f"Options: (1) Increase account to ${min_account_for_risk:,.0f}, "
                             f"(2) Reduce risk to {(affordable_shares * stop_loss_dist / account_size)*100:.1f}%, "
@@ -514,7 +518,13 @@ def analyze_stock(ticker, period="5y", window_days=5, account_size=10000, risk_p
     res['amihud_illiquidity'] = amihud
     
     # Position size as % of daily volume
-    if res['suggested_shares'] and avg_vol_30 > 0:
+    # IMPORTANT: Use the CALCULATED shares (before affordability check) for liquidity analysis
+    # We want to know if the INTENDED position would be too large, not just the affordable one
+    if res.get('calculated_shares') and avg_vol_30 > 0:
+        position_size_vs_vol = res['calculated_shares'] / avg_vol_30
+        res['position_size_vs_volume'] = float(position_size_vs_vol)
+    elif res['suggested_shares'] and avg_vol_30 > 0:
+        # Fallback: use suggested shares if we don't have calculated
         position_size_vs_vol = res['suggested_shares'] / avg_vol_30
         res['position_size_vs_volume'] = float(position_size_vs_vol)
     
@@ -542,15 +552,47 @@ def analyze_stock(ticker, period="5y", window_days=5, account_size=10000, risk_p
         res['expected_edge_pct'] is not None and
         res['total_friction_pct'] is not None):
         
-        is_liquid = (
-            res['position_size_vs_volume'] < 0.02 and 
-            res['expected_edge_pct'] > (res['total_friction_pct'] * 3)
-        )
-        res['is_liquid_enough'] = is_liquid
+        # Check if position is too large for the market
+        position_too_large = res['position_size_vs_volume'] >= 0.02  # 2% threshold
+        edge_too_small = res['expected_edge_pct'] <= (res['total_friction_pct'] * 3)
+        
+        if position_too_large:
+            # Liquidity issue - position would move the market
+            res['is_liquid_enough'] = False
+            res['liquidity_failed'] = True  # Flag this as liquidity failure, not pattern failure
+            
+            vol_pct = res['position_size_vs_volume'] * 100
+            if vol_pct > 100:
+                res['liquidity_warning'] = (
+                    f"Position would be {vol_pct:.1f}% of daily volume - exceeds entire daily trading! "
+                    f"This would cause massive slippage. This tool is designed for retail/small institutional traders. "
+                    f"Large institutions need multi-day VWAP execution, dark pools, or reduce position size to <2% of daily volume."
+                )
+            elif vol_pct > 10:
+                res['liquidity_warning'] = (
+                    f"Position would be {vol_pct:.1f}% of daily volume (need <2%). "
+                    f"This would significantly move the market and cause severe slippage (est. 10-30%). "
+                    f"Options: (1) Reduce risk tolerance to get smaller position, (2) Split order over multiple days, "
+                    f"or (3) Trade a more liquid stock."
+                )
+            else:
+                res['liquidity_warning'] = (
+                    f"Position would be {vol_pct:.1f}% of daily volume (need <2%). "
+                    f"This would impact the market. Consider reducing position size or spreading execution over time."
+                )
+        elif edge_too_small:
+            # Edge too small - pattern might be weak but this is about costs
+            res['is_liquid_enough'] = False
+            res['liquidity_failed'] = False  # This is edge failure, not liquidity
+        else:
+            # All good
+            res['is_liquid_enough'] = True
+            res['liquidity_failed'] = False
     else:
         # If we don't have position sizing (unaffordable), don't fail liquidity check
         # The pattern might be good, just not executable with this account size
         res['is_liquid_enough'] = True  # Don't fail pattern validation due to small account
+        res['liquidity_failed'] = False
     
     # Liquidity Quality Score
     res['liquidity_score'] = get_liquidity_score(amihud, res['position_size_vs_volume'])
@@ -568,13 +610,13 @@ def analyze_stock(ticker, period="5y", window_days=5, account_size=10000, risk_p
     
     # ═══════════════════════════════════════════════════════════════════════
     # CRITICAL FIX: Zero out edge if pattern failed statistical validation
+    # BUT NOT if liquidity failed (position too large) - that's a different issue
     # ═══════════════════════════════════════════════════════════════════════
-    if res['final_signal'] in ['DO_NOT_TRADE', 'NO_CLEAR_SIGNAL']:
+    if res['final_signal'] in ['DO_NOT_TRADE', 'NO_CLEAR_SIGNAL'] and not res.get('liquidity_failed', False):
         # Pattern is unreliable - no exploitable edge exists
         res['expected_edge_pct'] = 0.0
-        res['is_liquid_enough'] = False
         
-        # Update warning to explain why
+        # Build detailed failure explanation
         validation_failures = []
         
         if res.get('predictability_score', 0) < 3:
@@ -592,7 +634,7 @@ def analyze_stock(ticker, period="5y", window_days=5, account_size=10000, risk_p
         if res.get('momentum_corr') is not None and abs(res['momentum_corr']) <= 0.1:
             validation_failures.append(f"Weak momentum (|r|={abs(res['momentum_corr']):.3f})")
         
-        # Set comprehensive warning
+        # Set comprehensive warning (only if NOT liquidity failure)
         if validation_failures:
             failure_msg = "; ".join(validation_failures)
             res['liquidity_warning'] = f"Pattern failed statistical validation: {failure_msg}. No exploitable edge exists."

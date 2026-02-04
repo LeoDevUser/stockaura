@@ -246,6 +246,21 @@ export function TradingVerdict({ results, transactionCost, accountSize }: Tradin
         )}
       </div>
 
+      {/* Show liquidity warning if position too large for market */}
+      {results.liquidity_failed && config.verdict !== 'DO NOT TRADE' && (
+        <div className="liquidity-failure-warning">
+          <h4 style={{ color: '#f59e0b', margin: '0 0 0.75em 0' }}>
+            ⚠ Liquidity Constraint
+          </h4>
+          <p style={{ color: '#d0d0d0', fontSize: '0.95em', lineHeight: '1.6', margin: '0' }}>
+            {results.liquidity_warning}
+          </p>
+          <p style={{ color: '#999', fontSize: '0.85em', marginTop: '1em', fontStyle: 'italic' }}>
+            Note: The trading pattern itself is valid ({config.verdict}). The issue is your position size relative to daily trading volume.
+          </p>
+        </div>
+      )}
+
       {/* Position Details - Only show if tradeable or wait */}
       {config.verdict !== 'DO NOT TRADE' && (
         <div className="position-details">
