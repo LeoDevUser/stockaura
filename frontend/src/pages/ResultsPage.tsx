@@ -1,14 +1,8 @@
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { useState, useEffect } from 'react'
 import Chart from '../components/Chart'
-import { PositionSizingCard, ZEMAIndicator } from '../components/Sizing'
-import { LiquidityAnalysis } from '../components/LiquidityAnalysis'
-import { UnifiedTradingRecommendation, DetailedSignalBreakdown } from '../components/TradingRecommendation'
+import { TradingVerdict } from '../components/TradingVerdict'
 import '../styles/ResultsPage.css'
-import '../styles/Direction.css'
-import '../styles/Trend.css'
-import '../styles/Hurst.css'
-import '../styles/Liquidity.css'
 import SearchBar from '../components/SearchBar'
 import logo from '../assets/logo-dark.png'
 import home from '../assets/home.png'
@@ -51,7 +45,6 @@ export interface AnalysisResult {
   suggested_shares: number | null
   stop_loss_price: number | null
   position_risk_amount: number | null
-  // Liquidity fields
   avg_daily_volume: number | null
   amihud_illiquidity: number | null
   liquidity_score: string | null
@@ -71,17 +64,12 @@ export interface AnalysisResult {
   error?: string
 }
 
-interface TradeabilityAssessment {
-  tradeable: boolean
-  reason: string
-  confidence: 'high' | 'medium' | 'low'
-}
-
 export default function ResultsPage() {
   const [searchParams] = useSearchParams()
   const ticker = searchParams.get('ticker')
   const [results, setResults] = useState<AnalysisResult | null>(null)
   const [loading, setLoading] = useState<boolean>(true)
+  const [transactionCost, setTransactionCost] = useState<number>(0.001) // Default 0.1%
   const navigate = useNavigate()
 
   const handleNavigate = (ticker: string) => {
@@ -105,143 +93,6 @@ export default function ResultsPage() {
     fetchResults()
   }, [ticker])
 
-  /**
-   * CRITICAL FIX: Tradeability Assessment
-   * 
-   * PRINCIPLE: Single Source of Truth
-   * ─────────────────────────────────
-   * The backend's generate_trading_signal() performs ALL validation:
-   * ✓ Predictability score >= 3
-   * ✓ Regime stability >= 0.7
-   * ✓ Liquidity adequate (is_liquid_enough)
-   * ✓ Momentum detected (|r| > 0.1)
-   * ✓ Trend direction clear (UP or DOWN)
-   * 
-   * The final_signal is the OUTPUT of these checks.
-   * 
-   * The frontend should TRUST and MAP the signal, NOT re-check metrics.
-   */
-  const assessTradeability = (): TradeabilityAssessment => {
-    if (!results) return { tradeable: false, reason: 'No data', confidence: 'high' }
-
-    const signal = results.final_signal
-
-    // TIER 1: Explicit Rejection
-    if (signal === 'DO_NOT_TRADE') {
-      return {
-        tradeable: false,
-        reason: 'Pattern failed statistical validation - insufficient predictability, weak regime stability, or edge too small vs costs',
-        confidence: 'high'
-      }
-    }
-
-    // TIER 2: No Signal
-    if (signal === 'NO_CLEAR_SIGNAL') {
-      return {
-        tradeable: false,
-        reason: 'No detectable momentum or market structure too ambiguous',
-        confidence: 'high'
-      }
-    }
-
-    // TIER 3: Wait for Setup (Pattern Good, Entry Not Ready)
-    if (signal === 'WAIT_FOR_TREND') {
-      return {
-        tradeable: true,
-        reason: 'Pattern shows merit but trend direction unclear - wait for trend confirmation before entering',
-        confidence: 'medium'
-      }
-    }
-
-    if (signal === 'WAIT_PULLBACK') {
-      return {
-        tradeable: true,
-        reason: 'Uptrend confirmed but price overbought (Z > +1.0) - wait for pullback to better entry',
-        confidence: 'high'
-      }
-    }
-
-    if (signal === 'WAIT_SHORT_BOUNCE') {
-      return {
-        tradeable: true,
-        reason: 'Downtrend confirmed but price oversold (Z < -1.0) - wait for bounce to better short entry',
-        confidence: 'high'
-      }
-    }
-
-    if (signal === 'WAIT_OR_SHORT_BOUNCE') {
-      return {
-        tradeable: true,
-        reason: 'Uptrend weakening with momentum reversing - wait for breakdown or short the bounce',
-        confidence: 'medium'
-      }
-    }
-
-    if (signal === 'WAIT_FOR_REVERSAL') {
-      return {
-        tradeable: true,
-        reason: 'Downtrend weakening with momentum reversing - wait for reversal confirmation',
-        confidence: 'medium'
-      }
-    }
-
-    // TIER 4: Trade Now (Pattern Good + Entry Price Good)
-    if (signal === 'BUY_UPTREND') {
-      return {
-        tradeable: true,
-        reason: 'Strong uptrend with positive momentum and ideal entry level - ready to buy',
-        confidence: 'high'
-      }
-    }
-
-    if (signal === 'BUY_PULLBACK') {
-      return {
-        tradeable: true,
-        reason: 'Strong uptrend with pullback dip - excellent entry point for long position',
-        confidence: 'high'
-      }
-    }
-
-    if (signal === 'BUY_MOMENTUM') {
-      return {
-        tradeable: true,
-        reason: 'Positive momentum detected in uptrend - suitable for momentum-following entry',
-        confidence: 'medium'
-      }
-    }
-
-    if (signal === 'SHORT_DOWNTREND') {
-      return {
-        tradeable: true,
-        reason: 'Strong downtrend with persistent momentum and ideal entry level - ready to short',
-        confidence: 'high'
-      }
-    }
-
-    if (signal === 'SHORT_BOUNCES_ONLY') {
-      return {
-        tradeable: true,
-        reason: 'Downtrend detected but not strong trending regime - short bounces only, avoid holding',
-        confidence: 'medium'
-      }
-    }
-
-    if (signal === 'SHORT_MOMENTUM') {
-      return {
-        tradeable: true,
-        reason: 'Negative momentum detected in downtrend - suitable for momentum-following short',
-        confidence: 'medium'
-      }
-    }
-
-    // Fallback (should never reach if signal generation is correct)
-    return {
-      tradeable: false,
-      reason: `Unknown signal: ${signal} - rerun analysis`,
-      confidence: 'high'
-    }
-  }
-
   // Determine market regime description
   const getRegimeDescription = (): string => {
     if (!results?.hurst) return 'Unknown'
@@ -249,8 +100,6 @@ export default function ResultsPage() {
     if (results.hurst < 0.45) return 'Mean-Reverting'
     return 'Random Walk'
   }
-
-  const tradeability = assessTradeability()
 
   if (loading) return <div className="loading-page"><p>Loading...</p></div>
 
@@ -288,12 +137,30 @@ export default function ResultsPage() {
         </div>
       </div>
 
+      {/* Transaction Cost Input */}
+      <div className="transaction-cost-input">
+        <label>
+          <span>Transaction Cost (per trade):</span>
+          <input
+            type="number"
+            value={(transactionCost * 100).toFixed(3)}
+            onChange={(e) => setTransactionCost(parseFloat(e.target.value) / 100)}
+            step={0.001}
+            min={0}
+          />
+          <span>%</span>
+        </label>
+        <small>
+          Common values: Interactive Brokers $0.005 (0.5%), Robinhood $0 (0%), Traditional broker 0.1-1%
+        </small>
+      </div>
+
       {/* Main Results Grid */}
       <div className="results-grid">
         
         {/* LEFT SECTION: Header Stats */}
         <div className="section header-stats">
-          <h3>Header Stats</h3>
+          <h3>Key Metrics</h3>
           
           {results.trend_direction && (
             <div className="stat trend-stat">
@@ -362,7 +229,7 @@ export default function ResultsPage() {
 
         {/* MIDDLE SECTION: Statistical Engine */}
         <div className="section statistical-engine">
-          <h3>Statistical Engine</h3>
+          <h3>Statistical Tests</h3>
 
           <div className="metric-box">
             <label>Market Regime</label>
@@ -410,18 +277,9 @@ export default function ResultsPage() {
           )}
         </div>
 
-        {/* RIGHT SECTION: Chart & Summary */}
+        {/* RIGHT SECTION: Chart */}
         <div className="section visual-summary">
           <Chart ohlcData={results.OHLC} ticker={ticker || 'Unknown'} />
-
-          {/* Tradeability Assessment - NOW USES FINAL_SIGNAL */}
-          <div className={`tradeability-box ${tradeability.tradeable ? 'tradeable' : 'not-tradeable'}`}>
-            <h4>{tradeability.tradeable ? '✓ POTENTIALLY TRADEABLE' : '✗ NOT RECOMMENDED'}</h4>
-            <p><strong>Assessment:</strong> {tradeability.reason}</p>
-            <p style={{ fontSize: '0.85em', color: '#aaa' }}>
-              Confidence: <span style={{ textTransform: 'capitalize' }}>{tradeability.confidence}</span>
-            </p>
-          </div>
 
           {/* Summary Text */}
           <div className="summary-text">
@@ -441,28 +299,18 @@ export default function ResultsPage() {
                 ⚠⚠⚠ SEVERE WARNING: This stock has lost {Math.abs(results.Return).toFixed(1)}% annually. Consider bankruptcy risk before trading.
               </p>
             )}
-
-            <p style={{ fontSize: '0.85em', color: '#888', marginTop: '1em' }}>
-              ⚠ <strong>Important:</strong> Historical patterns don't guarantee future performance. 
-              Even if tradeable, paper trade first to verify the strategy works in real conditions.
-            </p>
           </div>
         </div>
       </div>
 
-      {/* UNIFIED TRADING RECOMMENDATION */}
-      <div className="recommendation-section">
-        <UnifiedTradingRecommendation results={results} />
+      {/* UNIFIED TRADING VERDICT */}
+      <div className="trading-verdict-section">
+        <TradingVerdict results={results} transactionCost={transactionCost} />
       </div>
 
-      {/* OPTIONAL: Detailed Signal Breakdown for Power Users */}
-      <div className="detailed-section">
-        <DetailedSignalBreakdown results={results} />
-      </div>
-
-      {/* DETAILED METRICS SECTION */}
-      <div className="additional-metrics">
-        <h3>Detailed Metrics</h3>
+      {/* DETAILED METRICS SECTION (Collapsible) */}
+      <details className="detailed-metrics">
+        <summary>📊 Show Detailed Metrics</summary>
         
         <div className="metrics-grid">
           {results.momentum_corr !== null && (
@@ -518,22 +366,7 @@ export default function ResultsPage() {
             </div>
           )}
         </div>
-
-        {/* Position Sizing Card */}
-        <div className='sizing-container'>
-          <PositionSizingCard results={results}></PositionSizingCard>
-        </div>
-
-        {/* Z-EMA Indicator */}
-        <div className='zema-container'>
-          <ZEMAIndicator results={results}></ZEMAIndicator>
-        </div>
-
-        {/* Liquidity Analysis */}
-        <div className='liquidity-container'>
-          <LiquidityAnalysis results={results}></LiquidityAnalysis>
-        </div>
-      </div>
+      </details>
     </div>
   )
 }
