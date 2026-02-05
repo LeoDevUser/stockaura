@@ -61,6 +61,12 @@ async def search(q: str, limit: int = 10):
         return results[:limit]
     return results
 
+@app.get('/top')
+async def top():
+    with open('top_stocks.json','r') as fp:
+        data = json.load(fp)
+    return data
+
 @app.get("/")
 def root():
     return {"message": "StockAura API is running"}

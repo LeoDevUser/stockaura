@@ -99,3 +99,11 @@
   font-size: 0.85rem;
   color: #666;
 }
+
+.go-top {
+	color: #ff9500;
+	text-align: center;
+	font-size:  0.5rem;
+	cursor: pointer;
+	text-decoration: underline;
+}

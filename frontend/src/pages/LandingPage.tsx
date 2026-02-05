@@ -23,6 +23,9 @@ export default function LandingPage() {
             placeholder="Enter a stock ticker to analyze it.." 
           />
         </div>
+		<div className='go-top' onClick={() => navigate('/top')}>
+	  <h1>Top 50 Trading Opportunities</h1>
+		</div>
       </div>
     </div>
   )
