@@ -230,147 +230,150 @@ export default function ResultsPage() {
         </div>
       </div>
 
-      {/* Main Results Grid */}
+      {/* Main Results Grid - Row Layout */}
       <div className="results-grid">
         
-        {/* LEFT SECTION: Header Stats */}
-        <div className="section header-stats">
-          <h3>Key Metrics</h3>
-          
-          {results.trend_direction && (
-            <div className="stat trend-stat">
-              <label>
+        {/* First Row: Key Metrics and Statistical Tests side by side */}
+        <div className="results-grid-row">
+          {/* LEFT: Key Metrics */}
+          <div className="section header-stats">
+            <h3>Key Metrics</h3>
+            
+            {results.trend_direction && (
+              <div className="stat trend-stat">
+                <label>
 			  Current Trend (1-Year)
 			  <Tooltip content="The stock's overall price direction over the past year. UP = gaining value, DOWN = losing value, NEUTRAL = flat. Based on comparing current price to 252 trading days ago."></Tooltip>
 			  </label>
-              <div className={`trend-value trend-${results.trend_direction.toLowerCase()}`}>
-                {results.trend_direction === 'UP' && '📈 UP'}
-                {results.trend_direction === 'DOWN' && '📉 DOWN'}
-                {results.trend_direction === 'NEUTRAL' && '➡️ NEUTRAL'}
+                <div className={`trend-value trend-${results.trend_direction.toLowerCase()}`}>
+                  {results.trend_direction === 'UP' && '📈 UP'}
+                  {results.trend_direction === 'DOWN' && '📉 DOWN'}
+                  {results.trend_direction === 'NEUTRAL' && '➡️ NEUTRAL'}
+                </div>
+                {results.recent_return_1y && (
+                  <small>{(results.recent_return_1y * 100).toFixed(2)}% (1-year return)</small>
+                )}
               </div>
-              {results.recent_return_1y && (
-                <small>{(results.recent_return_1y * 100).toFixed(2)}% (1-year return)</small>
-              )}
-            </div>
-          )}
+            )}
 
-          <div className="stat">
-            <label>Predictability Score
+            <div className="stat">
+              <label>Predictability Score
 			<Tooltip content={tooltipContent.predictabilityScore} />
 			</label>
-            <div className="score">{results.predictability_score}/4</div>
-            <div className="progress-bar">
-              <div
-                className="progress-fill"
-                style={{ width: `${(results.predictability_score / 4) * 100}%` }}
-              />
-            </div>
-          </div>
-
-          {results.regime_stability !== null && (
-            <div className="stat">
-              <label>Regime Stability (OOS)
-			  <Tooltip content={tooltipContent.regimeStability} />
-			  </label>
+              <div className="score">{results.predictability_score}/4</div>
               <div className="progress-bar">
                 <div
                   className="progress-fill"
-                  style={{
-                    width: `${results.regime_stability * 100}%`,
-                    backgroundColor: results.regime_stability > 0.7 ? '#22c55e' : results.regime_stability > 0.6 ? '#f59e0b' : '#ef4444'
-                  }}
+                  style={{ width: `${(results.predictability_score / 4) * 100}%` }}
                 />
               </div>
-              <small>{(results.regime_stability * 100).toFixed(0)}%</small>
             </div>
-          )}
 
-          {results.sharpe !== null && (
-            <div className="stat">
-              <label>Sharpe Ratio
+            {results.regime_stability !== null && (
+              <div className="stat">
+                <label>Regime Stability (OOS)
+			  <Tooltip content={tooltipContent.regimeStability} />
+			  </label>
+                <div className="progress-bar">
+                  <div
+                    className="progress-fill"
+                    style={{
+                      width: `${results.regime_stability * 100}%`,
+                      backgroundColor: results.regime_stability > 0.7 ? '#22c55e' : results.regime_stability > 0.6 ? '#f59e0b' : '#ef4444'
+                    }}
+                  />
+                </div>
+                <small>{(results.regime_stability * 100).toFixed(0)}%</small>
+              </div>
+            )}
+
+            {results.sharpe !== null && (
+              <div className="stat">
+                <label>Sharpe Ratio
 			  <Tooltip content={tooltipContent.sharpeRatio}/>
 			  </label>
-              <div className="value">{results.sharpe.toFixed(2)}</div>
-            </div>
-          )}
-          
-          {results.volatility !== null && (
-            <div className="stat">
-              <label>Volatility (Annual)
+                <div className="value">{results.sharpe.toFixed(2)}</div>
+              </div>
+            )}
+            
+            {results.volatility !== null && (
+              <div className="stat">
+                <label>Volatility (Annual)
 			  <Tooltip content={tooltipContent.volatility}/>
 			  </label>
-              <div className="value">{results.volatility.toFixed(2)}%</div>
-            </div>
-          )}
-          
-          {results.Return !== null && (
-            <div className="stat">
-              <label>Return (Annual)
+                <div className="value">{results.volatility.toFixed(2)}%</div>
+              </div>
+            )}
+            
+            {results.Return !== null && (
+              <div className="stat">
+                <label>Return (Annual)
 			  <Tooltip content={tooltipContent.annualReturn} />
 			  </label>
-              <div className={`value ${results.Return < 0 ? 'negative' : 'positive'}`}>
-                {results.Return.toFixed(2)}%
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* MIDDLE SECTION: Statistical Engine */}
-        <div className="section statistical-engine">
-          <h3>Statistical Tests</h3>
-
-          <div className="metric-box">
-            <label>Market Regime
-			<Tooltip content={tooltipContent.hurstExponent} />
-			</label>
-            {results.hurst !== null && (
-              <div className="gauge-container">
-                <div className="gauge">
-                  <div className="gauge-fill" style={{
-                    background: results.hurst > 0.55 ? '#ef4444' : results.hurst < 0.45 ? '#22c55e' : '#f59e0b',
-                    width: `${Math.max(0, Math.min(100, (results.hurst - 0.3) * 200))}%`
-                  }} />
+                <div className={`value ${results.Return < 0 ? 'negative' : 'positive'}`}>
+                  {results.Return.toFixed(2)}%
                 </div>
-                <div className="gauge-labels">
-                  <span>Mean Revert</span>
-                  <span className="center">Neutral</span>
-                  <span>Trending</span>
-                </div>
-                <div className="hurst-value">In-Sample: {results.hurst.toFixed(3)}</div>
-                {results.hurst_oos !== null && (
-                  <div className="hurst-value-oos">Out-Sample: {results.hurst_oos.toFixed(3)}</div>
-                )}
               </div>
             )}
           </div>
 
-          {results.adf_pvalue !== null && (
+          {/* RIGHT: Statistical Tests */}
+          <div className="section statistical-engine">
+            <h3>Statistical Tests</h3>
+
             <div className="metric-box">
-              <label>ADF Test: 
+              <label>Market Regime
+			<Tooltip content={tooltipContent.hurstExponent} />
+			</label>
+              {results.hurst !== null && (
+                <div className="gauge-container">
+                  <div className="gauge">
+                    <div className="gauge-fill" style={{
+                      background: results.hurst > 0.55 ? '#ef4444' : results.hurst < 0.45 ? '#22c55e' : '#f59e0b',
+                      width: `${Math.max(0, Math.min(100, (results.hurst - 0.3) * 200))}%`
+                    }} />
+                  </div>
+                  <div className="gauge-labels">
+                    <span>Mean Revert</span>
+                    <span className="center">Neutral</span>
+                    <span>Trending</span>
+                  </div>
+                  <div className="hurst-value">In-Sample: {results.hurst.toFixed(3)}</div>
+                  {results.hurst_oos !== null && (
+                    <div className="hurst-value-oos">Out-Sample: {results.hurst_oos.toFixed(3)}</div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {results.adf_pvalue !== null && (
+              <div className="metric-box">
+                <label>ADF Test: 
 			<Tooltip content={tooltipContent.adfTest} />	  
 			</label>
-              <div className={`status ${results.adf_pvalue < 0.05 ? 'stationary' : 'non-stationary'}`}>
-                {results.adf_pvalue < 0.05 ? '✓ Stationary' : '✗ Non-Stationary'}
+                <div className={`status ${results.adf_pvalue < 0.05 ? 'stationary' : 'non-stationary'}`}>
+                  {results.adf_pvalue < 0.05 ? '✓ Stationary' : '✗ Non-Stationary'}
+                </div>
+                <br/>
+                <small>p-value: {results.adf_pvalue.toFixed(4)}</small>
               </div>
-              <br/>
-              <small>p-value: {results.adf_pvalue.toFixed(4)}</small>
-            </div>
-          )}
+            )}
 
-          {results.lb_pvalue !== null && (
-            <div className="metric-box">
-              <label>Ljung-Box Test
+            {results.lb_pvalue !== null && (
+              <div className="metric-box">
+                <label>Ljung-Box Test
 			  <Tooltip content={tooltipContent.ljungBox} />
 			  </label>
-              <div className={`status ${results.lb_pvalue < 0.05 ? 'significant' : 'insignificant'}`}>
-                {results.lb_pvalue < 0.05 ? '✓ Autocorrelated' : '✗ No Autocorrelation'}
-              </div><br></br>
-              <small>p-value: {results.lb_pvalue.toFixed(4)}</small>
-            </div>
-          )}
+                <div className={`status ${results.lb_pvalue < 0.05 ? 'significant' : 'insignificant'}`}>
+                  {results.lb_pvalue < 0.05 ? '✓ Autocorrelated' : '✗ No Autocorrelation'}
+                </div><br></br>
+                <small>p-value: {results.lb_pvalue.toFixed(4)}</small>
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* RIGHT SECTION: Chart */}
+        {/* Second Row: Chart (Full Width) */}
         <div className="section visual-summary">
           <Chart ohlcData={results.OHLC} ticker={ticker || 'Unknown'} />
 

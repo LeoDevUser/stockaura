@@ -4,7 +4,7 @@
 
 .results-page {
 	background: #25282f;
-	min-height: 100vh; /* CRITICAL FIX: Ensure full height coverage */
+	min-height: 100vh;
 }
 
 .nav {
@@ -149,27 +149,39 @@
 	justify-content: center;
 }
 
-/* Container for the three main sections */
+/* Container for the three main sections - ROW LAYOUT */
 .results-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    display: flex;
+    flex-direction: column;
     gap: 20px;
     padding: 20px;
-    align-items: start;
 	color: white;
+}
+
+/* Wrapper for first row (Key Metrics + Statistical Tests) */
+.results-grid-row {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 20px;
 }
 
 .section {
     background: #2b2f36;
     padding: 20px;
     border-radius: 8px;
-    min-height: 300px;
+    width: 100%;
 }
 
 .section h3 {
   margin: 0 0 1em 0;
   color: #ff9500;
   font-size: 1.1em;
+}
+
+/* Chart section spans full width */
+.section.visual-summary {
+    grid-column: 1 / -1;
+    min-height: 500px;
 }
 
 /* Trading Verdict Section */
@@ -257,7 +269,7 @@
 
 /* Responsive adjustment for tablets/phones */
 @media (max-width: 1024px) {
-    .results-grid {
+    .results-grid-row {
         grid-template-columns: 1fr;
     }
     
