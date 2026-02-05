@@ -151,12 +151,12 @@
 
 /* Container for the three main sections */
 .results-grid {
-	color: white;
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     gap: 20px;
     padding: 20px;
     align-items: start;
+	color: white;
 }
 
 .section {
@@ -182,7 +182,7 @@
   background: #2b2f36;
   padding: 1.5em 2em;
   margin: 20px;
-  margin-bottom: 40px; /* CRITICAL FIX: Add extra bottom margin to prevent cutoff */
+  margin-bottom: 40px;
   border-radius: 8px;
   border: 1px solid #444;
 }

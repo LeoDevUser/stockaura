@@ -364,7 +364,7 @@ export default function ResultsPage() {
 			  </label>
               <div className={`status ${results.lb_pvalue < 0.05 ? 'significant' : 'insignificant'}`}>
                 {results.lb_pvalue < 0.05 ? '✓ Autocorrelated' : '✗ No Autocorrelation'}
-              </div>
+              </div><br></br>
               <small>p-value: {results.lb_pvalue.toFixed(4)}</small>
             </div>
           )}
