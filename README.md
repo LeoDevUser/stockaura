@@ -1,73 +1,82 @@
-# React + TypeScript + Vite
+# StockAura
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A statistical stock analysis platform that uses time-series metrics to evaluate trading opportunities based on market regimes, momentum patterns, and predictability scores.
 
-Currently, two official plugins are available:
+## Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- **Statistical Analysis**: Hurst exponent, ADF test, Ljung-Box test, momentum correlation
+- **Market Regime Detection**: Trending vs mean-reverting behavior classification
+- **Trading Signals**: Buy/Short/Wait recommendations based on statistical validation
+- **Position Sizing**: Risk-based position calculator with stop-loss levels
+- **Liquidity Analysis**: Volume-based feasibility checks and slippage estimation
+- **Top 50 Screener**: Pre-ranked trading opportunities across major tickers
+- **Interactive Charts**: Candlestick visualization with adjustable parameters
 
-## React Compiler
+## Tech Stack
 
-The React Compiler is currently not compatible with SWC. See [this issue](https://github.com/vitejs/vite-plugin-react/issues/428) for tracking the progress.
+**Frontend**: React + TypeScript + Vite  
+**Backend**: FastAPI  
+**Charts**: Lightweight Charts  
+**Styling**: CSS
 
-## Expanding the ESLint configuration
+## Quick Start
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+### Frontend
+```bash
+cd frontend
+npm install
+npm run dev
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
-
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+### Backend
+```bash
+cd backend
+pip install -r requirements.txt
+python app.py  # or uvicorn main:app
 ```
+
+## Project Structure
+
+```
+frontend/
+├── src/
+│   ├── components/      # Reusable UI components
+│   │   ├── Chart.tsx           # Candlestick chart
+│   │   ├── SearchBar.tsx       # Ticker search with autocomplete
+│   │   ├── TradingVerdict.tsx  # Signal analysis display
+│   │   └── Tooltip.tsx         # Info tooltips
+│   ├── pages/
+│   │   ├── LandingPage.tsx     # Home/search page
+│   │   ├── ResultsPage.tsx     # Individual stock analysis
+│   │   └── Top.tsx             # Top 50 opportunities
+│   └── styles/          # Component-specific CSS
+backend/
+├── api/                 # Analysis endpoints
+└── data/                # Market data & calculations
+```
+
+## Key Metrics Explained
+
+| Metric | What It Means |
+|--------|---------------|
+| **Hurst Exponent** | <0.45 = mean-reverting, >0.55 = trending, ~0.5 = random walk |
+| **Predictability Score** | 0-4 scale based on passing statistical tests (ADF, Ljung-Box, etc.) |
+| **Regime Stability** | Out-of-sample validation — pattern consistency over time |
+| **Edge/Friction Ratio** | Expected return vs trading costs (need >3x to be tradeable) |
+
+## API Endpoints
+
+- `GET /api/search?q={ticker}` - Search for stocks
+- `GET /api/analyze?ticker={ticker}&period=5y&window_days=5` - Full analysis
+- `GET /api/top` - Top 50 trading opportunities (cached)
+
+## Configuration
+
+Users can adjust:
+- **Account Size**: Total portfolio value
+- **Risk Tolerance**: Max loss per trade (% of account)
+- **Transaction Costs**: Commission percentage
+
+## Disclaimer
+
+**This is a research tool, not financial advice.** Historical patterns don't guarantee future results. Always paper trade first and never risk more than you can afford to lose.
