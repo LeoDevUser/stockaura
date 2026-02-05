@@ -118,7 +118,7 @@ def get_liquidity_warning(liquidity_score, position_size_vs_volume, amihud_illiq
     return ' | '.join(warnings) if warnings else None
 
 
-exchange_to_currency = {'T': 'JPY', 'NYB': '', 'CO': 'DKK', 'L': 'GBP or GBX', 'DE': 'EUR', 'PA': 'EUR'}
+exchange_to_currency = {'T': 'JPY', 'NYB': '', 'CO': 'DKK', 'L': 'GBP or GBX', 'DE': 'EUR', 'PA': 'EUR', 'TO': 'CAD', 'V': 'CAD'}
 
 def analyze_stock(ticker, period="5y", window_days=5, account_size=10000, risk_per_trade=0.02):
     try:
