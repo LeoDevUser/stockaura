@@ -129,7 +129,7 @@ def analyze_stock(ticker, period="5y", window_days=5, account_size=10000, risk_p
     if df.empty:
         return {"error": "No data found, symbol may be delisted", "ticker": ticker}
 
-    if len(df) < 5:
+    if len(df) < 252:
         return {"error": "Insufficient historical data", "ticker": ticker}
 
     if isinstance(df.columns, pd.MultiIndex):
@@ -142,6 +142,8 @@ def analyze_stock(ticker, period="5y", window_days=5, account_size=10000, risk_p
         currency = exchange_to_currency[tmp[1]]
     title = yfticker.info.get('longName')
     current = yfticker.info.get('currentPrice')
+    if current is None or current == 0:
+        current = round(float(df['Close'].iloc[-1]),2)  # Use last closing price as fallback
     
     # CRITICAL VALIDATION: Account must be able to afford 1 share + risk buffer
     if current and account_size < current * (1 + risk_per_trade):
