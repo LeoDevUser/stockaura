@@ -283,15 +283,6 @@ def main():
     
     save_results(results)
     print_summary(results)
-    
-    print(f"\n{'='*100}")
-    print("📁 NEXT STEPS:")
-    print(f"{'='*100}")
-    print("1. Copy the file:       cp top_stocks.json frontend/public/")
-    print("2. Start your app:      cd frontend && npm run dev")
-    print("3. Visit:               http://localhost:5173/top-stocks")
-    print(f"{'='*100}\n")
-
 
 if __name__ == "__main__":
     main()
