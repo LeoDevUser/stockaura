@@ -156,7 +156,7 @@ def analyze_stock(ticker, period="5y", window_days=5, account_size=10000, risk_p
                 f"You need ${min_account_needed - account_size:,.2f} more."
             ),
             "ticker": ticker,
-            "current_price": current,
+            "current": current,
             "min_account_needed": min_account_needed,
             "risk_per_trade": risk_per_trade
         }
@@ -236,30 +236,30 @@ def analyze_stock(ticker, period="5y", window_days=5, account_size=10000, risk_p
     returns_window_test = df_test['Return_Window'].dropna().values
 
     # CALCULATE RECENT RETURNS (for determining trend direction)
-    current_price = df['Close'].iloc[-1]
+    current = df['Close'].iloc[-1]
     
     # 1 year ago (252 trading days)
     if len(df) >= 252:
         price_1y_ago = df['Close'].iloc[-252]
-        recent_return_1y = (current_price - price_1y_ago) / price_1y_ago
+        recent_return_1y = (current - price_1y_ago) / price_1y_ago
         res['recent_return_1y'] = float(recent_return_1y)
     
     # 6 months ago (126 trading days)
     if len(df) >= 126:
         price_6m_ago = df['Close'].iloc[-126]
-        recent_return_6m = (current_price - price_6m_ago) / price_6m_ago
+        recent_return_6m = (current - price_6m_ago) / price_6m_ago
         res['recent_return_6m'] = float(recent_return_6m)
     
     # 3 months ago (63 trading days)
     if len(df) >= 63:
         price_3m_ago = df['Close'].iloc[-63]
-        recent_return_3m = (current_price - price_3m_ago) / price_3m_ago
+        recent_return_3m = (current - price_3m_ago) / price_3m_ago
         res['recent_return_3m'] = float(recent_return_3m)
     
     # 1 month ago (21 trading days)
     if len(df) >= 21:
         price_1m_ago = df['Close'].iloc[-21]
-        recent_return_1m = (current_price - price_1m_ago) / price_1m_ago
+        recent_return_1m = (current - price_1m_ago) / price_1m_ago
         res['recent_return_1m'] = float(recent_return_1m)
     
     # Determine trend direction based on recent performance
@@ -313,12 +313,12 @@ def analyze_stock(ticker, period="5y", window_days=5, account_size=10000, risk_p
             res['volatility_category'] = 'VERY_HIGH'
 
     # POSITION SIZING
-    if res['volatility'] is not None and current_price and current_price > 0:
+    if res['volatility'] is not None and current and current > 0:
         # Daily volatility = Annual / sqrt(252)
         daily_vol_pct = (res['volatility'] / 100) / np.sqrt(252)
         
         # Stop loss distance = current price * (2x daily volatility)
-        stop_loss_dist = current_price * (daily_vol_pct * 2)
+        stop_loss_dist = current * (daily_vol_pct * 2)
         
         if stop_loss_dist > 0:
             # Position size = $ Risk / $ Distance
@@ -333,7 +333,7 @@ def analyze_stock(ticker, period="5y", window_days=5, account_size=10000, risk_p
             
             if whole_shares >= 1:
                 # Check if user can actually afford this position
-                position_value = whole_shares * current_price
+                position_value = whole_shares * current
                 
                 if position_value <= account_size:
                     # User can afford this position
@@ -342,11 +342,11 @@ def analyze_stock(ticker, period="5y", window_days=5, account_size=10000, risk_p
                     # CRITICAL FIX: Store both long and short stop loss prices
                     # For LONGS: stop loss is BELOW current price (limit downside)
                     # For SHORTS: stop loss is ABOVE current price (limit upside)
-                    res['stop_loss_price_long'] = float(current_price - stop_loss_dist)
-                    res['stop_loss_price_short'] = float(current_price + stop_loss_dist)
+                    res['stop_loss_price_long'] = float(current - stop_loss_dist)
+                    res['stop_loss_price_short'] = float(current + stop_loss_dist)
                     
                     # Default to long for now (will be updated after signal generation)
-                    res['stop_loss_price'] = float(current_price - stop_loss_dist)
+                    res['stop_loss_price'] = float(current - stop_loss_dist)
                     
                     res['position_risk_amount'] = float(risk_amount)
                     
@@ -381,7 +381,7 @@ def analyze_stock(ticker, period="5y", window_days=5, account_size=10000, risk_p
                     res['position_risk_amount'] = None
                     
                     # Calculate how many shares they can actually afford
-                    affordable_shares = int(account_size / current_price)
+                    affordable_shares = int(account_size / current)
                     
                     # Calculate what account size they'd need for this risk level
                     min_account_for_risk = position_value
@@ -398,8 +398,8 @@ def analyze_stock(ticker, period="5y", window_days=5, account_size=10000, risk_p
                     else:
                         res['position_size_note'] = (
                             f"Position value (${position_value:,.0f}) exceeds account size (${account_size:,.0f}). "
-                            f"Cannot afford even 1 share (${current_price:,.2f}). "
-                            f"Need minimum ${current_price * (1 + risk_per_trade):,.0f} account to trade this stock "
+                            f"Cannot afford even 1 share (${current:,.2f}). "
+                            f"Need minimum ${current * (1 + risk_per_trade):,.0f} account to trade this stock "
                             f"with {risk_per_trade*100:.1f}% risk."
                         )
             else:
