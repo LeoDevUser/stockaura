@@ -4,6 +4,19 @@ from statsmodels.stats.diagnostic import acorr_ljungbox
 from statsmodels.tsa.stattools import adfuller
 import pandas as pd
 
+def format_number(num):
+    num = float(num)
+    if abs(num) >= 1e12:
+        return f'{num/1e12:.2f}T'
+    elif abs(num) >= 1e9:
+        return f'{num/1e9:.2f}B'
+    elif abs(num) >= 1e6:
+        return f'{num/1e6:.2f}M'
+    elif abs(num) >= 1e3:
+        return f'{num/1e3:.2f}K'
+    else:
+        return f'{num}'
+
 def hurst_exponent(series, lags_min=10, lags_max=500):
     lags = range(lags_min, lags_max)
     tau = []
@@ -142,6 +155,7 @@ def analyze_stock(ticker, period="5y", window_days=5, account_size=10000, risk_p
         currency = exchange_to_currency[tmp[1]]
     title = yfticker.info.get('longName')
     current = yfticker.info.get('currentPrice')
+    cap = format_number(yfticker.info.get('marketCap'))
     if current is None or current == 0:
         current = round(float(df['Close'].iloc[-1]),2)  # Use last closing price as fallback
     
@@ -157,6 +171,7 @@ def analyze_stock(ticker, period="5y", window_days=5, account_size=10000, risk_p
             ),
             "ticker": ticker,
             "current": current,
+            "cap": cap,
             "min_account_needed": min_account_needed,
             "risk_per_trade": risk_per_trade
         }
@@ -218,6 +233,7 @@ def analyze_stock(ticker, period="5y", window_days=5, account_size=10000, risk_p
         'liquidity_warning': None,
         'title': title,
         'current': current,
+        'cap': cap,
         'currency': currency,
         'OHLC': OHLC.to_dict('records'),
         'data_points': len(df),

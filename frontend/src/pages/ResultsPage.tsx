@@ -43,6 +43,7 @@ export interface AnalysisResult {
   recent_return_1m: number | null
   title: string
   current: number
+  cap: string | null
   currency: string
   suggested_shares: number | null
   stop_loss_price: number | null
@@ -50,7 +51,6 @@ export interface AnalysisResult {
   position_size_note: string | null
   risk_per_trade: number
   min_account_needed: number | null
-  current_price: number | null
   avg_daily_volume: number | null
   amihud_illiquidity: number | null
   liquidity_score: string | null
@@ -379,6 +379,7 @@ export default function ResultsPage() {
 
           {/* Summary Text */}
           <div className="summary-text">
+			<p>Mkt cap: &ensp; {results?.cap}</p>
             {results.hurst !== null && (
               <p>
                 <strong>{ticker}</strong> is in a <span className={getRegimeDescription().toLowerCase()}>
