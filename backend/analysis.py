@@ -1265,9 +1265,16 @@ def analyze_stock(ticker, period="5y", window_days=5, account_size=10000, risk_p
         
         if validation_failures:
             failure_msg = "; ".join(validation_failures)
-            res['liquidity_warning'] = f"Pattern failed statistical validation: {failure_msg}. No exploitable edge exists."
+            pattern_warning = f"Pattern failed statistical validation: {failure_msg}. No exploitable edge exists."
         else:
-            res['liquidity_warning'] = "Pattern failed statistical validation - no exploitable edge exists"
+            pattern_warning = "Pattern failed statistical validation - no exploitable edge exists"
+
+         # Append to existing liquidity warning instead of overwriting
+        existing_warning = res.get('liquidity_warning')
+        if existing_warning:
+            res['liquidity_warning'] = f"{existing_warning} | {pattern_warning}"
+        else:
+            res['liquidity_warning'] = pattern_warning
     
     return res
 

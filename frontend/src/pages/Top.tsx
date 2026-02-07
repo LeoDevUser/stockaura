@@ -12,7 +12,9 @@ interface TopStock {
   predictability_score: number
   regime_stability: number | null
   momentum_corr: number | null
+  momentum_corr_oos: number | null
   expected_edge_pct: number | null
+  total_friction_pct: number | null
   current: number
   currency: string
   trend_direction: 'UP' | 'DOWN' | 'NEUTRAL' | null
@@ -21,6 +23,15 @@ interface TopStock {
   liquidity_failed: boolean
   suggested_shares: number | null
   z_ema: number | null
+  hurst: number | null
+  hurst_significant: boolean | null
+  stop_loss_price: number | null
+  lb_pvalue: number | null
+  adf_pvalue: number | null
+  vp_ratio: number | null
+  vp_confirming: boolean | null
+  trade_quality: number | null
+  quality_label: string | null
 }
 
 interface TopStocksData {
@@ -199,7 +210,7 @@ export default function TopStocksPage() {
               <div className="metrics-row">
                 <div className="metric">
                   <span className="metric-label">Predictability</span>
-                  <span className="metric-value">{stock.predictability_score}/4</span>
+                  <span className="metric-value">{stock.predictability_score}/5</span>
                 </div>
                 {stock.expected_edge_pct !== null && (
                   <div className="metric">
@@ -210,6 +221,31 @@ export default function TopStocksPage() {
                   </div>
                 )}
               </div>
+
+              {stock.trade_quality !== null && (
+                <div className="metrics-row">
+                  <div className="metric">
+                    <span className="metric-label">Setup Quality</span>
+                    <span className="metric-value" style={{
+                      color: stock.trade_quality >= 7 ? '#22c55e' :
+                             stock.trade_quality >= 5 ? '#f59e0b' :
+                             stock.trade_quality >= 3 ? '#f97316' : '#ef4444'
+                    }}>
+                      {stock.trade_quality.toFixed(1)}/10 {stock.quality_label && `(${stock.quality_label})`}
+                    </span>
+                  </div>
+                  {stock.vp_confirming !== null && (
+                    <div className="metric">
+                      <span className="metric-label">Vol-Price</span>
+                      <span className="metric-value" style={{
+                        color: stock.vp_confirming ? '#22c55e' : '#ef4444'
+                      }}>
+                        {stock.vp_confirming ? '✓' : '✗'} {stock.vp_ratio?.toFixed(2)}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {stock.regime_stability !== null && (
                 <div className="stability-bar">

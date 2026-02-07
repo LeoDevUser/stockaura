@@ -17,7 +17,7 @@ export default function SearchBar({ onSelect, placeholder = "Search..." }: Searc
   const [_, setLoading] = useState<boolean>(false)
   const [isFocus, setFocus] = useState<boolean>(false)
   const [selectedIndex, setSelectedIndex] = useState<number>(-1)
-  const selectedRef = useRef<HTMLElement>(null)
+  const selectedRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (!input.trim()) {
