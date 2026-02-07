@@ -96,11 +96,11 @@ export function TradingVerdict({ results, transactionCost, accountSize }: Tradin
     },
     'WAIT_OR_SHORT_BOUNCE': {
       verdict: 'WAIT',
-      action: '⚠ WAIT or SHORT Bounce',
+      action: '⚠ WAIT and Buy the Dip or SHORT Bounce',
       color: '#f59e0b',
       riskLevel: 'MEDIUM-HIGH',
       confidence: 'MEDIUM',
-      summary: 'Uptrend showing weakness - wait for breakdown or short the bounce'
+      summary: 'Overbought in mean-reverting uptrend — wait for a pullback to buy the dip, or short the bounce now'
     },
     'WAIT_FOR_REVERSAL': {
       verdict: 'WAIT',

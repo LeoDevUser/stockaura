@@ -580,7 +580,7 @@ export default function ResultsPage() {
                 <Tooltip content={tooltipContent.adfTest} />
               </label>
               <div className="value" style={{ color: results.adf_pvalue < 0.05 ? '#22c55e' : '#ef4444' }}>
-                {results.adf_pvalue < 0.05 ? '✓ Stationary' : '✗ Non-Stationary'}
+                {results.adf_pvalue < 0.05 ? 'Stationary' : 'Non-Stationary'}
               </div>
               <small>p-value: {results.adf_pvalue.toFixed(4)}</small>
             </div>
@@ -592,7 +592,7 @@ export default function ResultsPage() {
                 <Tooltip content={tooltipContent.ljungBox} />
               </label>
               <div className="value" style={{ color: results.lb_pvalue < 0.05 ? '#22c55e' : '#ef4444' }}>
-                {results.lb_pvalue < 0.05 ? '✓ Autocorrelated' : '✗ No Autocorrelation'}
+                {results.lb_pvalue < 0.05 ? 'Autocorrelated' : 'No Autocorrelation'}
               </div>
               <small>p-value: {results.lb_pvalue.toFixed(4)}</small>
             </div>
