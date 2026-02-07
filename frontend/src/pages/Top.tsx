@@ -58,6 +58,10 @@ export default function TopStocksPage() {
         }
         
         const jsonData: TopStocksData = await response.json()
+        // Filter out non-actionable signals — only show tradeable opportunities
+        jsonData.stocks = jsonData.stocks.filter(
+          s => s.final_signal !== 'NO_CLEAR_SIGNAL' && s.final_signal !== 'DO_NOT_TRADE'
+        )
         setData(jsonData)
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Unknown error')
@@ -122,7 +126,7 @@ export default function TopStocksPage() {
           <img src={logo} alt="Dark Logo" onClick={() => navigate('/')} />
         </div>
         <div className="page-title">
-          <h1>Top 50 Trading Opportunities</h1>
+          <h1>Top Trading Opportunities</h1>
           <p className="timestamp">Updated: {new Date(data.timestamp).toLocaleString()}</p>
         </div>
         <div className="home-top">

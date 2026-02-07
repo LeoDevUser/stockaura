@@ -24,7 +24,7 @@ export default function LandingPage() {
           />
         </div>
 		<div className='go-top' onClick={() => navigate('/top')}>
-	  <h1>Top 50 Trading Opportunities</h1>
+	  <h1>Top Trading Opportunities</h1>
 		</div>
       </div>
     </div>

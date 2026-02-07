@@ -1,4 +1,5 @@
 import { type AnalysisResult } from '../pages/ResultsPage.tsx'
+import Tooltip from './Tooltip'
 import '../styles/TradingVerdict.css'
 
 interface TradingVerdictProps {
@@ -402,11 +403,21 @@ export function TradingVerdict({ results, transactionCost, accountSize }: Tradin
             </div>
             {results.quality_components && (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5em 1.5em', fontSize: '0.8em', color: '#999' }}>
-                <span>Trend Align: <strong style={{ color: '#ccc' }}>{results.quality_components.trend_alignment.toFixed(1)}/2</strong></span>
-                <span>Entry Timing: <strong style={{ color: '#ccc' }}>{results.quality_components.entry_timing.toFixed(1)}/2</strong></span>
-                <span>Sharpe: <strong style={{ color: '#ccc' }}>{results.quality_components.sharpe_quality.toFixed(1)}/2</strong></span>
-                <span>Vol Fit: <strong style={{ color: '#ccc' }}>{results.quality_components.volatility_fit.toFixed(1)}/2</strong></span>
-                <span>Vol-Price: <strong style={{ color: '#ccc' }}>{results.quality_components.volume_confirmation.toFixed(1)}/2</strong></span>
+                <span>Trend Align: <strong style={{ color: '#ccc' }}>{results.quality_components.trend_alignment.toFixed(1)}/2</strong>
+                  <Tooltip content={<><strong>Trend Alignment (0–2)</strong><p>Measures how well momentum direction matches the current trend. Full marks when momentum and trend agree (e.g., positive momentum in an uptrend). Reduced score when momentum is weak or conflicts with the trend direction.</p><p><strong>2.0:</strong> Strong agreement | <strong>1.5:</strong> Moderate | <strong>1.0:</strong> Weak | <strong>0.0:</strong> Conflicting</p></>} />
+                </span>
+                <span>Entry Timing: <strong style={{ color: '#ccc' }}>{results.quality_components.entry_timing.toFixed(1)}/2</strong>
+                  <Tooltip content={<><strong>Entry Timing / Z-EMA (0–2)</strong><p>Uses the Z-score of price relative to its exponential moving average to evaluate entry timing. Ideal entries are near or below the EMA (pullbacks in uptrends, bounces in downtrends).</p><p><strong>2.0:</strong> Z-EMA in sweet spot (−0.5 to 0.5) | <strong>1.5:</strong> Moderate (0.5–1.0) | <strong>0.5:</strong> Overbought/oversold (&gt;1.5)</p></>} />
+                </span>
+                <span>Sharpe: <strong style={{ color: '#ccc' }}>{results.quality_components.sharpe_quality.toFixed(1)}/2</strong>
+                  <Tooltip content={<><strong>Sharpe Quality (0–2)</strong><p>Evaluates the risk-adjusted return using the Sharpe ratio (annualized return ÷ annualized volatility). Higher Sharpe means better return per unit of risk.</p><p><strong>2.0:</strong> Sharpe ≥ 1.5 (excellent) | <strong>1.5:</strong> Sharpe ≥ 1.0 | <strong>1.0:</strong> Sharpe ≥ 0.5 | <strong>0.5:</strong> Sharpe &gt; 0</p></>} />
+                </span>
+                <span>Vol Fit: <strong style={{ color: '#ccc' }}>{results.quality_components.volatility_fit.toFixed(1)}/2</strong>
+                  <Tooltip content={<><strong>Volatility Fit (0–2)</strong><p>Scores whether the stock's annualized volatility falls in the ideal trading range. Too low = not enough movement to profit after costs. Too high = stop losses get blown easily.</p><p><strong>2.0:</strong> 20–35% (sweet spot) | <strong>1.5:</strong> 15–45% | <strong>0.8:</strong> 10–55% | <strong>0.3:</strong> Outside range</p></>} />
+                </span>
+                <span>Vol-Price: <strong style={{ color: '#ccc' }}>{results.quality_components.volume_confirmation.toFixed(1)}/2</strong>
+                  <Tooltip content={<><strong>Volume-Price Confirmation (0–2)</strong><p>Checks whether trading volume supports the trend. In an uptrend, up-day volume should exceed down-day volume by &gt;10%. In a downtrend, the reverse. Higher volume on trend-direction days shows institutional conviction.</p><p><strong>2.0:</strong> Volume confirms strongly | <strong>0.2:</strong> Volume does not confirm</p></>} />
+                </span>
               </div>
             )}
           </div>

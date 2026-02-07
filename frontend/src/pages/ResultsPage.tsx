@@ -344,13 +344,58 @@ export default function ResultsPage() {
           <div className="section statistical-engine">
             <h3>Statistical Tests</h3>
 
+            {/* ── SCORED PREDICTABILITY TESTS (5 tests, each worth 1 point) ── */}
+            <div style={{ 
+              marginBottom: '1.5em', 
+              padding: '0.75em', 
+              background: 'rgba(255, 149, 0, 0.08)', 
+              borderRadius: '6px',
+              border: '1px solid rgba(255, 149, 0, 0.2)',
+              fontSize: '0.85em',
+              color: '#ccc'
+            }}>
+              These 5 tests determine the <strong style={{ color: '#ff9500' }}>Predictability Score</strong>. Each passed test = 1 point.
+            </div>
+
+            {/* Test 1: Momentum Correlation */}
             <div className="metric-box">
-              <label>Market Regime (DFA)
+              <label>1. Momentum Correlation (3-Day Blocks)
+                <Tooltip content={tooltipContent.momentumCorrelation} />
+              </label>
+              {results.momentum_corr !== null ? (
+                <>
+                  <div className={`status ${Math.abs(results.momentum_corr) > 0.08 ? 'significant' : 'insignificant'}`}>
+                    {Math.abs(results.momentum_corr) > 0.08 
+                      ? `✓ Passed (${(results.momentum_corr * 100).toFixed(1)}%, need >±8%)` 
+                      : `✗ Failed (${(results.momentum_corr * 100).toFixed(1)}%, need >±8%)`}
+                  </div>
+                  {results.momentum_corr_oos !== null && (
+                    <small style={{ display: 'block', marginTop: '0.4em' }}>
+                      Out-of-Sample: {(results.momentum_corr_oos * 100).toFixed(1)}%
+                      {Math.abs(results.momentum_corr - results.momentum_corr_oos) > 0.1 && (
+                        <span style={{ color: '#ef4444' }}> ⚠ Degraded</span>
+                      )}
+                    </small>
+                  )}
+                </>
+              ) : (
+                <div className="status insignificant">✗ No data</div>
+              )}
+            </div>
+
+            {/* Test 2: Hurst/DFA */}
+            <div className="metric-box">
+              <label>2. Market Regime (DFA / Hurst)
 			<Tooltip content={tooltipContent.hurstExponent} />
 			</label>
-              {results.hurst !== null && (
+              {results.hurst !== null ? (
                 <div className="gauge-container">
-                  <div className="gauge">
+                  <div className={`status ${(results.hurst_significant && (results.hurst > 0.55 || results.hurst < 0.45)) ? 'significant' : 'insignificant'}`}>
+                    {(results.hurst_significant && (results.hurst > 0.55 || results.hurst < 0.45))
+                      ? `✓ Passed — ${results.hurst > 0.55 ? 'Trending' : 'Mean-Reverting'} (H=${results.hurst.toFixed(3)})`
+                      : `✗ Failed — ${!results.hurst_significant ? 'Not distinguishable from random' : 'Near random walk'} (H=${results.hurst.toFixed(3)})`}
+                  </div>
+                  <div className="gauge" style={{ marginTop: '0.75em' }}>
                     <div className="gauge-fill" style={{
                       background: results.hurst > 0.55 ? '#ef4444' : results.hurst < 0.45 ? '#22c55e' : '#f59e0b',
                       width: `${Math.max(0, Math.min(100, (results.hurst - 0.3) * 200))}%`
@@ -361,54 +406,131 @@ export default function ResultsPage() {
                     <span className="center">Neutral</span>
                     <span>Trending</span>
                   </div>
-                  <div className="hurst-value">In-Sample: {results.hurst.toFixed(3)}</div>
-                  {results.hurst_oos !== null && (
-                    <div className="hurst-value-oos">Out-Sample: {results.hurst_oos.toFixed(3)}</div>
-                  )}
-                  {results.hurst_significant !== null && (
-                    <div style={{
-                      marginTop: '0.5em',
-                      fontSize: '0.85em',
-                      color: results.hurst_significant ? '#22c55e' : '#ef4444'
-                    }}>
-                      {results.hurst_significant
-                        ? '✓ Significant vs shuffled baseline'
-                        : '✗ Not distinguishable from random'}
-                      {results.hurst_shuffled_mean !== null && (
-                        <span style={{ color: '#888', marginLeft: '0.5em' }}>
-                          (baseline: {results.hurst_shuffled_mean.toFixed(3)})
-                        </span>
-                      )}
-                    </div>
+                  <div style={{ marginTop: '0.5em', fontSize: '0.85em', color: '#aaa' }}>
+                    In-Sample: {results.hurst.toFixed(3)}
+                    {results.hurst_oos !== null && <> | Out-Sample: {results.hurst_oos.toFixed(3)}</>}
+                  </div>
+                  {results.hurst_shuffled_mean !== null && (
+                    <small style={{ color: '#777' }}>
+                      Shuffled baseline: {results.hurst_shuffled_mean.toFixed(3)}
+                    </small>
                   )}
                 </div>
+              ) : (
+                <div className="status insignificant">✗ No data</div>
               )}
             </div>
 
-            {results.adf_pvalue !== null && (
+            {/* Test 3: Mean Reversion */}
+            <div className="metric-box">
+              <label>3. Mean Reversion After Extremes
+                <Tooltip content={tooltipContent.meanReversion} />
+              </label>
+              {(results.mean_rev_up !== null && results.mean_rev_down !== null) ? (
+                <>
+                  <div className={`status ${(Math.abs(results.mean_rev_up) > 0.003 && Math.abs(results.mean_rev_down) > 0.003) ? 'significant' : 'insignificant'}`}>
+                    {(Math.abs(results.mean_rev_up) > 0.003 && Math.abs(results.mean_rev_down) > 0.003)
+                      ? '✓ Passed — Significant conditional reversal detected'
+                      : '✗ Failed — Weak or no reversal after extremes'}
+                  </div>
+                  <div style={{ marginTop: '0.5em', display: 'flex', flexWrap: 'wrap', gap: '1em', fontSize: '0.85em' }}>
+                    <span style={{ color: '#aaa' }}>
+                      After Up: <strong style={{ color: results.mean_rev_up < 0 ? '#22c55e' : '#f59e0b' }}>
+                        {(results.mean_rev_up * 100).toFixed(2)}%
+                      </strong>
+                    </span>
+                    <span style={{ color: '#aaa' }}>
+                      After Down: <strong style={{ color: results.mean_rev_down > 0 ? '#22c55e' : '#f59e0b' }}>
+                        {(results.mean_rev_down * 100).toFixed(2)}%
+                      </strong>
+                    </span>
+                  </div>
+                  {(results.mean_rev_up_oos !== null || results.mean_rev_down_oos !== null) && (
+                    <div style={{ marginTop: '0.3em', fontSize: '0.8em', color: '#777' }}>
+                      OOS: After Up {results.mean_rev_up_oos !== null ? `${(results.mean_rev_up_oos * 100).toFixed(2)}%` : 'N/A'}
+                      {' | '}After Down {results.mean_rev_down_oos !== null ? `${(results.mean_rev_down_oos * 100).toFixed(2)}%` : 'N/A'}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="status insignificant">✗ No data</div>
+              )}
+            </div>
+
+            {/* Test 4: Regime Stability OOS */}
+            <div className="metric-box">
+              <label>4. Regime Stability (Out-of-Sample)
+                <Tooltip content={tooltipContent.regimeStability} />
+              </label>
+              {results.regime_stability !== null ? (
+                <>
+                  <div className={`status ${results.regime_stability >= 0.5 ? 'significant' : 'insignificant'}`}>
+                    {results.regime_stability >= 1.0
+                      ? '✓ Passed — Pattern fully confirmed out-of-sample (100%)'
+                      : results.regime_stability >= 0.5
+                      ? `✓ Passed — Pattern partially holds (${(results.regime_stability * 100).toFixed(0)}%)`
+                      : results.regime_stability === 0
+                      ? '✗ Failed — Momentum REVERSED out-of-sample (0%)'
+                      : `✗ Failed — Pattern unstable (${(results.regime_stability * 100).toFixed(0)}%)`}
+                  </div>
+                  <div className="progress-bar" style={{ marginTop: '0.5em' }}>
+                    <div
+                      className="progress-fill"
+                      style={{
+                        width: `${results.regime_stability * 100}%`,
+                        backgroundColor: results.regime_stability >= 1.0 ? '#22c55e' : results.regime_stability >= 0.5 ? '#f59e0b' : '#ef4444'
+                      }}
+                    />
+                  </div>
+                </>
+              ) : (
+                <div className="status insignificant">✗ No data</div>
+              )}
+            </div>
+
+            {/* Test 5: Volume-Price Confirmation */}
+            {results.volume_price_data && (
               <div className="metric-box">
-                <label>ADF Test: 
-			<Tooltip content={tooltipContent.adfTest} />	  
-			</label>
-                <div className={`status ${results.adf_pvalue < 0.05 ? 'stationary' : 'non-stationary'}`}>
-                  {results.adf_pvalue < 0.05 ? '✓ Stationary' : '✗ Non-Stationary'}
+                <label>5. Volume-Price Confirmation
+                  <Tooltip content={
+                    <>
+                      <strong>Volume-Price Confirmation</strong>
+                      <p>Tests whether volume supports the current trend direction.</p>
+                      <ul>
+                        <li><strong>Uptrend:</strong> Up-day volume should exceed down-day volume by &gt;10%</li>
+                        <li><strong>Downtrend:</strong> Down-day volume should exceed up-day volume by &gt;10%</li>
+                        <li><strong>Neutral:</strong> No clear trend to confirm</li>
+                      </ul>
+                      <p>The ratio shows average volume on up days divided by average volume on down days. A ratio &gt;1.10 in an uptrend or &lt;0.90 in a downtrend means volume confirms the trend.</p>
+                      <p><strong>Counts as 1 point toward predictability score if confirming.</strong></p>
+                    </>
+                  } />
+                </label>
+                <div className={`status ${results.volume_price_data.vp_confirming ? 'significant' : 'insignificant'}`}>
+                  {results.volume_price_data.vp_confirming ? '✓ Passed — Volume confirms trend' : '✗ Failed — Volume does not confirm trend'}
                 </div>
-                <br/>
-                <small>p-value: {results.adf_pvalue.toFixed(4)}</small>
+                <div style={{ marginTop: '0.75em', display: 'flex', flexWrap: 'wrap', gap: '1em', fontSize: '0.85em' }}>
+                  <span style={{ color: '#aaa' }}>
+                    Up/Down Ratio: <strong style={{ color: results.volume_price_data.vp_ratio > 1.1 ? '#22c55e' : results.volume_price_data.vp_ratio < 0.9 ? '#ef4444' : '#f59e0b' }}>
+                      {results.volume_price_data.vp_ratio.toFixed(3)}
+                    </strong>
+                  </span>
+                  <span style={{ color: '#aaa' }}>
+                    Trend: <strong style={{
+                      color: results.volume_price_data.trend_for_vp === 'UP' ? '#22c55e' :
+                             results.volume_price_data.trend_for_vp === 'DOWN' ? '#ef4444' : '#f59e0b'
+                    }}>
+                      {results.volume_price_data.trend_for_vp}
+                    </strong>
+                  </span>
+                </div>
+                <div style={{ marginTop: '0.5em', display: 'flex', flexWrap: 'wrap', gap: '1em', fontSize: '0.8em', color: '#777' }}>
+                  <span>Avg Vol Up Days: {results.volume_price_data.avg_vol_up.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                  <span>Avg Vol Down Days: {results.volume_price_data.avg_vol_down.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                </div>
               </div>
             )}
 
-            {results.lb_pvalue !== null && (
-              <div className="metric-box">
-                <label>Ljung-Box Test
-			  <Tooltip content={tooltipContent.ljungBox} />
-			  </label>
-                <div className={`status ${results.lb_pvalue < 0.05 ? 'significant' : 'insignificant'}`}>
-                  {results.lb_pvalue < 0.05 ? '✓ Autocorrelated' : '✗ No Autocorrelation'}
-                </div><br></br>
-                <small>p-value: {results.lb_pvalue.toFixed(4)}</small>
-              </div>
-            )}
           </div>
         </div>
 
@@ -449,51 +571,30 @@ export default function ResultsPage() {
 
       {/* DETAILED METRICS SECTION (Collapsible) */}
       <details className="detailed-metrics">
-        <summary>📊 Show Detailed Metrics</summary>
+        <summary>📊 Show Additional Metrics</summary>
         
         <div className="metrics-grid">
-          {results.momentum_corr !== null && (
+          {results.adf_pvalue !== null && (
             <div className="metric-card">
-              <label>Momentum Correlation
-			  <Tooltip content={tooltipContent.momentumCorrelation} />
-			  </label>
-              <div className="value">{results.momentum_corr.toFixed(3)}</div>
-              {results.momentum_corr_oos !== null && (
-                <div className="value-secondary">
-                  Out-of-Sample: {results.momentum_corr_oos.toFixed(3)}
-                  {Math.abs(results.momentum_corr - results.momentum_corr_oos) > 0.1 && (
-                    <span style={{ color: '#ef4444' }}> ⚠ Degraded</span>
-                  )}
-                </div>
-              )}
+              <label>ADF Test (Stationarity)
+                <Tooltip content={tooltipContent.adfTest} />
+              </label>
+              <div className="value" style={{ color: results.adf_pvalue < 0.05 ? '#22c55e' : '#ef4444' }}>
+                {results.adf_pvalue < 0.05 ? '✓ Stationary' : '✗ Non-Stationary'}
+              </div>
+              <small>p-value: {results.adf_pvalue.toFixed(4)}</small>
             </div>
           )}
 
-          {results.mean_rev_up !== null && (
+          {results.lb_pvalue !== null && (
             <div className="metric-card">
-              <label>Mean Rev After Up Move
-			  <Tooltip content={tooltipContent.meanReversion} />
-			  </label>
-              <div className="value">{(results.mean_rev_up * 100).toFixed(2)}%</div>
-              {results.mean_rev_up_oos !== null && (
-                <div className="value-secondary">
-                  Out-of-Sample: {(results.mean_rev_up_oos * 100).toFixed(2)}%
-                </div>
-              )}
-            </div>
-          )}
-
-          {results.mean_rev_down !== null && (
-            <div className="metric-card">
-              <label>Mean Rev After Down Move
-			  <Tooltip content={tooltipContent.meanReversion} />
-			  </label>
-              <div className="value">{(results.mean_rev_down * 100).toFixed(2)}%</div>
-              {results.mean_rev_down_oos !== null && (
-                <div className="value-secondary">
-                  Out-of-Sample: {(results.mean_rev_down_oos * 100).toFixed(2)}%
-                </div>
-              )}
+              <label>Ljung-Box Test (Autocorrelation)
+                <Tooltip content={tooltipContent.ljungBox} />
+              </label>
+              <div className="value" style={{ color: results.lb_pvalue < 0.05 ? '#22c55e' : '#ef4444' }}>
+                {results.lb_pvalue < 0.05 ? '✓ Autocorrelated' : '✗ No Autocorrelation'}
+              </div>
+              <small>p-value: {results.lb_pvalue.toFixed(4)}</small>
             </div>
           )}
 
@@ -512,6 +613,35 @@ export default function ResultsPage() {
               </small>
             </div>
           )}
+
+          {results.z_ema !== null && (
+            <div className="metric-card">
+              <label>Z-EMA (Entry Timing)
+			  <Tooltip content={tooltipContent.zEMA} />
+			  </label>
+              <div className="value">{results.z_ema.toFixed(3)}</div>
+              <small>
+                {results.z_ema > 1.0 ? 'Overbought' 
+                  : results.z_ema < -1.0 ? 'Oversold'
+                  : results.z_ema > -0.5 && results.z_ema < 1.0 ? 'Sweet spot'
+                  : 'Moderate'}
+              </small>
+            </div>
+          )}
+
+          {results.volatility_category !== null && (
+            <div className="metric-card">
+              <label>Volatility Category</label>
+              <div className="value">{results.volatility_category.replace('_', ' ')}</div>
+              <small>{results.volatility?.toFixed(1)}% annualized</small>
+            </div>
+          )}
+
+          <div className="metric-card">
+            <label>Data Points</label>
+            <div className="value">{results.data_points.toLocaleString()}</div>
+            <small>Trading days analyzed ({results.period})</small>
+          </div>
         </div>
       </details>
     </div>
