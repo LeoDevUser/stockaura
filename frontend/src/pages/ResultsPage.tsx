@@ -15,6 +15,8 @@ export interface AnalysisResult {
   period: string
   hurst: number | null
   hurst_oos: number | null
+  hurst_significant: boolean | null
+  hurst_shuffled_mean: number | null
   momentum_corr: number | null
   momentum_corr_oos: number | null
   lb_pvalue: number | null
@@ -30,7 +32,6 @@ export interface AnalysisResult {
   zscore: number | null
   z_ema: number | null
   volatility_category: string | null
-  golden_cross_short: boolean | null
   final_signal: string | null
   regime_stability: number | null
   data_points: number
@@ -59,7 +60,29 @@ export interface AnalysisResult {
   total_friction_pct: number | null
   expected_edge_pct: number | null
   is_liquid_enough: boolean | null
+  liquidity_failed: boolean
   liquidity_warning: string | null
+  speculative_full_shares: number | null
+  // Volume-Price Confirmation
+  vp_ratio: number | null
+  vp_confirming: boolean | null
+  volume_price_data: {
+    vp_ratio: number
+    vp_confirming: boolean
+    avg_vol_up: number
+    avg_vol_down: number
+    trend_for_vp: string
+  } | null
+  // Trade Quality Score
+  trade_quality: number | null
+  quality_components: {
+    trend_alignment: number
+    entry_timing: number
+    sharpe_quality: number
+    volatility_fit: number
+    volume_confirmation: number
+  } | null
+  quality_label: string | null
   OHLC: Array<{
     Date: string
     Open: number
@@ -260,11 +283,11 @@ export default function ResultsPage() {
               <label>Predictability Score
 			<Tooltip content={tooltipContent.predictabilityScore} />
 			</label>
-              <div className="score">{results.predictability_score}/4</div>
+              <div className="score">{results.predictability_score}/5</div>
               <div className="progress-bar">
                 <div
                   className="progress-fill"
-                  style={{ width: `${(results.predictability_score / 4) * 100}%` }}
+                  style={{ width: `${(results.predictability_score / 5) * 100}%` }}
                 />
               </div>
             </div>
@@ -279,7 +302,7 @@ export default function ResultsPage() {
                     className="progress-fill"
                     style={{
                       width: `${results.regime_stability * 100}%`,
-                      backgroundColor: results.regime_stability > 0.7 ? '#22c55e' : results.regime_stability > 0.6 ? '#f59e0b' : '#ef4444'
+                      backgroundColor: results.regime_stability >= 1.0 ? '#22c55e' : results.regime_stability >= 0.5 ? '#f59e0b' : '#ef4444'
                     }}
                   />
                 </div>
@@ -322,7 +345,7 @@ export default function ResultsPage() {
             <h3>Statistical Tests</h3>
 
             <div className="metric-box">
-              <label>Market Regime
+              <label>Market Regime (DFA)
 			<Tooltip content={tooltipContent.hurstExponent} />
 			</label>
               {results.hurst !== null && (
@@ -341,6 +364,22 @@ export default function ResultsPage() {
                   <div className="hurst-value">In-Sample: {results.hurst.toFixed(3)}</div>
                   {results.hurst_oos !== null && (
                     <div className="hurst-value-oos">Out-Sample: {results.hurst_oos.toFixed(3)}</div>
+                  )}
+                  {results.hurst_significant !== null && (
+                    <div style={{
+                      marginTop: '0.5em',
+                      fontSize: '0.85em',
+                      color: results.hurst_significant ? '#22c55e' : '#ef4444'
+                    }}>
+                      {results.hurst_significant
+                        ? '✓ Significant vs shuffled baseline'
+                        : '✗ Not distinguishable from random'}
+                      {results.hurst_shuffled_mean !== null && (
+                        <span style={{ color: '#888', marginLeft: '0.5em' }}>
+                          (baseline: {results.hurst_shuffled_mean.toFixed(3)})
+                        </span>
+                      )}
+                    </div>
                   )}
                 </div>
               )}
@@ -387,6 +426,9 @@ export default function ResultsPage() {
                 </span> regime with {results.adf_pvalue && results.adf_pvalue < 0.05 ? 'stationary' : 'non-stationary'} price action.
                 {results.trend_direction && (
                   <> Currently in a <strong>{results.trend_direction} trend</strong>.</>
+                )}
+                {results.hurst_significant === false && (
+                  <> <span style={{ color: '#f59e0b' }}>(Note: regime not statistically significant vs random)</span></>
                 )}
               </p>
             )}

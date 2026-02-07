@@ -17,36 +17,526 @@ def format_number(num):
     else:
         return f'{num}'
 
-def hurst_exponent(series, lags_min=10, lags_max=500):
-    lags = range(lags_min, lags_max)
-    tau = []
+
+def dfa_hurst(series, min_box=10, max_box=None, num_scales=20):
+    """
+    Detrended Fluctuation Analysis (DFA) to estimate Hurst exponent.
     
-    for lag in lags:
-        n_chunks = len(series) // lag
-        if n_chunks == 0:
+    More robust than R/S analysis:
+    - Less sensitive to short-term correlations and trends
+    - Better performance on finite-length series
+    - More stable across different parameter choices
+    
+    Returns: H, scales, fluctuations, poly
+    - H: Hurst exponent (slope of log-log plot)
+    - scales: box sizes used
+    - fluctuations: DFA fluctuation at each scale
+    - poly: polynomial fit coefficients
+    """
+    N = len(series)
+    if max_box is None:
+        max_box = N // 4  # Use at most 1/4 of series length
+    
+    if max_box <= min_box or N < min_box * 4:
+        return np.nan, None, None, None
+    
+    # Step 1: Integrate the mean-centered series (cumulative sum of deviations)
+    y = np.cumsum(series - np.mean(series))
+    
+    # Step 2: Generate logarithmically spaced box sizes
+    scales = np.unique(
+        np.logspace(np.log10(min_box), np.log10(max_box), num=num_scales).astype(int)
+    )
+    # Filter out scales that are too large
+    scales = scales[scales <= N // 2]
+    
+    if len(scales) < 4:
+        return np.nan, None, None, None
+    
+    fluctuations = []
+    
+    for box_size in scales:
+        # Number of non-overlapping boxes
+        n_boxes = N // box_size
+        if n_boxes < 2:
             continue
         
-        chunk_rs = []
-        for i in range(n_chunks):
-            chunk = series[i*lag:(i+1)*lag]
-            chunk_mean = np.mean(chunk)
-            Y = np.cumsum(chunk - chunk_mean)
-            R = np.max(Y) - np.min(Y)
-            S = np.std(chunk, ddof=1)
-            
-            if S != 0:
-                rs = R / S
-                chunk_rs.append(rs)
+        rms_values = []
         
-        if len(chunk_rs) > 0:
-            tau.append(np.mean(chunk_rs))
+        # Forward pass
+        for i in range(n_boxes):
+            start = i * box_size
+            end = start + box_size
+            segment = y[start:end]
+            
+            # Fit linear trend to segment
+            x = np.arange(box_size)
+            coeffs = np.polyfit(x, segment, 1)
+            trend = np.polyval(coeffs, x)
+            
+            # Calculate RMS of detrended segment
+            rms = np.sqrt(np.mean((segment - trend) ** 2))
+            rms_values.append(rms)
+        
+        # Backward pass (use remaining data from the end)
+        for i in range(n_boxes):
+            start = N - (i + 1) * box_size
+            end = start + box_size
+            if start < 0:
+                break
+            segment = y[start:end]
+            
+            x = np.arange(box_size)
+            coeffs = np.polyfit(x, segment, 1)
+            trend = np.polyval(coeffs, x)
+            
+            rms = np.sqrt(np.mean((segment - trend) ** 2))
+            rms_values.append(rms)
+        
+        if len(rms_values) > 0:
+            # Overall fluctuation for this scale
+            F = np.sqrt(np.mean(np.array(rms_values) ** 2))
+            if F > 0:
+                fluctuations.append(F)
+            else:
+                fluctuations.append(np.nan)
+        else:
+            fluctuations.append(np.nan)
     
-    lags = np.array(lags[:len(tau)])
-    tau = np.array(tau)
-    poly = np.polyfit(np.log(lags), np.log(tau), 1)
+    # Trim scales to match valid fluctuations
+    scales = scales[:len(fluctuations)]
+    fluctuations = np.array(fluctuations)
+    
+    # Remove NaN entries
+    valid = ~np.isnan(fluctuations) & (fluctuations > 0)
+    scales = scales[valid]
+    fluctuations = fluctuations[valid]
+    
+    if len(scales) < 4:
+        return np.nan, None, None, None
+    
+    # Step 3: Log-log fit to get Hurst exponent
+    log_scales = np.log(scales.astype(float))
+    log_fluct = np.log(fluctuations)
+    
+    poly = np.polyfit(log_scales, log_fluct, 1)
     H = poly[0]
     
-    return H, lags, tau, poly
+    return H, scales, fluctuations, poly
+
+
+def hurst_with_baseline(series, n_shuffles=50, **kwargs):
+    """
+    Compute DFA Hurst exponent with shuffled baseline comparison.
+    
+    Shuffling destroys temporal structure while preserving distribution.
+    If the real Hurst is not significantly different from shuffled Hurst,
+    the detected regime (trending/mean-reverting) is likely noise.
+    
+    Returns: H, H_shuffled_mean, H_shuffled_std, is_significant, scales, fluctuations, poly
+    - H: real Hurst exponent
+    - H_shuffled_mean: mean Hurst from shuffled series (should be ~0.5)
+    - H_shuffled_std: std of shuffled Hurst values
+    - is_significant: True if |H - 0.5| is statistically distinguishable from random
+    """
+    # Real Hurst
+    H, scales, fluctuations, poly = dfa_hurst(series, **kwargs)
+    
+    if np.isnan(H):
+        return H, np.nan, np.nan, False, None, None, None
+    
+    # Shuffled baseline
+    shuffled_hursts = []
+    rng = np.random.default_rng(42)  # Reproducible
+    
+    for _ in range(n_shuffles):
+        shuffled = rng.permutation(series)
+        H_shuf, _, _, _ = dfa_hurst(shuffled, **kwargs)
+        if not np.isnan(H_shuf):
+            shuffled_hursts.append(H_shuf)
+    
+    if len(shuffled_hursts) < 10:
+        # Not enough valid shuffles — can't assess significance
+        return H, np.nan, np.nan, False, scales, fluctuations, poly
+    
+    H_shuf_mean = np.mean(shuffled_hursts)
+    H_shuf_std = np.std(shuffled_hursts)
+    
+    # Significant if real H is >1.5 standard deviations from shuffled mean
+    # 1.5σ (~13% single-test FPR) is appropriate here because:
+    # - This is one of 4 gates, not a standalone decision (combined FPR is much lower)
+    # - 50 shuffles gives ~10% uncertainty on σ itself, making 2σ overly strict
+    # - Could alternatively use 100 shuffles + 2σ for tighter estimates
+    if H_shuf_std > 0:
+        z_score = abs(H - H_shuf_mean) / H_shuf_std
+        is_significant = z_score > 1.5
+    else:
+        is_significant = False
+    
+    return H, H_shuf_mean, H_shuf_std, is_significant, scales, fluctuations, poly
+
+
+def multi_day_momentum_corr(daily_returns, block_days=3):
+    """
+    Calculate momentum correlation using NON-OVERLAPPING multi-day blocks.
+    
+    Measures: "Does the direction of this 3-day period predict the next 3-day period?"
+    This is a medium-term signal (days-to-weeks timeframe).
+    
+    Why 3-day blocks (not 5-day):
+    - 5-day blocks from 5Y training data → ~250 blocks → ~125 pairs → too noisy
+    - 3-day blocks from 5Y training data → ~416 blocks → ~208 pairs → solid sample
+    - 3 days still captures multi-day momentum, not just daily noise
+    - No overlap = no bias, no corrections needed
+    
+    Returns: (correlation, n_pairs) or (None, 0)
+    """
+    n = len(daily_returns)
+    n_blocks = n // block_days
+    
+    if n_blocks < 20:  # Need at least 10 pairs
+        return None, 0
+    
+    # Build non-overlapping block returns
+    blocks = []
+    for i in range(n_blocks):
+        start = i * block_days
+        end = start + block_days
+        block_return = np.prod(1 + daily_returns[start:end]) - 1
+        blocks.append(block_return)
+    
+    blocks = np.array(blocks)
+    
+    # Consecutive block pairs: does block[i] predict block[i+1]?
+    x = blocks[:-1]
+    y = blocks[1:]
+    
+    if np.std(x) == 0 or np.std(y) == 0:
+        return None, 0
+    
+    corr = np.corrcoef(x, y)[0, 1]
+    
+    if np.isnan(corr):
+        return None, 0
+    
+    return float(corr), len(x)
+
+
+def non_overlapping_mean_reversion(returns, window_days):
+    """
+    Mean reversion analysis using non-overlapping windows.
+    
+    After a large up/down block, what happens in the NEXT block?
+    
+    Returns: (mean_rev_up, mean_rev_down) or (None, None)
+    """
+    n = len(returns)
+    n_blocks = n // window_days
+    
+    if n_blocks < 6:
+        return None, None
+    
+    block_returns = []
+    for i in range(n_blocks):
+        start = i * window_days
+        end = start + window_days
+        block = returns[start:end]
+        block_ret = np.prod(1 + block) - 1
+        block_returns.append(block_ret)
+    
+    block_returns = np.array(block_returns)
+    
+    if len(block_returns) < 6:
+        return None, None
+    
+    q75 = np.percentile(block_returns, 75)
+    q25 = np.percentile(block_returns, 25)
+    
+    mean_rev_up = None
+    mean_rev_down = None
+    
+    # After large up blocks
+    up_next = []
+    for i in range(len(block_returns) - 1):
+        if block_returns[i] > q75:
+            up_next.append(block_returns[i + 1])
+    
+    if len(up_next) > 0:
+        mean_rev_up = float(np.mean(up_next))
+    
+    # After large down blocks
+    down_next = []
+    for i in range(len(block_returns) - 1):
+        if block_returns[i] < q25:
+            down_next.append(block_returns[i + 1])
+    
+    if len(down_next) > 0:
+        mean_rev_down = float(np.mean(down_next))
+    
+    return mean_rev_up, mean_rev_down
+
+
+def volume_price_confirmation(df, lookback=60):
+    """
+    Volume-Price Confirmation Test (5th predictability test)
+    
+    Measures: Does volume increase on moves in the trend direction?
+    
+    Method:
+    - Split last `lookback` days into up-days and down-days
+    - Compare average volume on up-days vs down-days
+    - For uptrends: up-day volume should be higher (buyers are aggressive)
+    - For downtrends: down-day volume should be higher (sellers are aggressive)
+    
+    Returns: {
+        'vp_ratio': float,       # up_vol / down_vol (>1 = bullish confirmation)
+        'vp_confirming': bool,   # Does volume confirm trend direction?
+        'avg_vol_up': float,     # Average volume on up days
+        'avg_vol_down': float,   # Average volume on down days
+        'trend_for_vp': str      # Which trend was tested
+    }
+    """
+    try:
+        recent = df.tail(lookback).copy()
+        
+        if len(recent) < 20:
+            return None
+        
+        recent['daily_return'] = recent['Close'].pct_change()
+        recent = recent.dropna(subset=['daily_return', 'Volume'])
+        
+        up_days = recent[recent['daily_return'] > 0]
+        down_days = recent[recent['daily_return'] < 0]
+        
+        if len(up_days) < 5 or len(down_days) < 5:
+            return None
+        
+        avg_vol_up = float(up_days['Volume'].mean())
+        avg_vol_down = float(down_days['Volume'].mean())
+        
+        if avg_vol_down == 0:
+            return None
+        
+        vp_ratio = avg_vol_up / avg_vol_down
+        
+        # Determine recent trend from last 63 trading days (3 months)
+        if len(df) >= 63:
+            price_now = float(df['Close'].iloc[-1])
+            price_3m = float(df['Close'].iloc[-63])
+            trend_3m = (price_now - price_3m) / price_3m
+        else:
+            trend_3m = 0
+        
+        if trend_3m > 0.03:
+            trend_for_vp = 'UP'
+            # Uptrend confirmed: up-day volume > down-day volume by at least 10%
+            vp_confirming = vp_ratio > 1.10
+        elif trend_3m < -0.03:
+            trend_for_vp = 'DOWN'
+            # Downtrend confirmed: down-day volume > up-day volume by at least 10%
+            vp_confirming = vp_ratio < 0.90
+        else:
+            trend_for_vp = 'NEUTRAL'
+            # No clear trend — volume confirmation is ambiguous
+            vp_confirming = False
+        
+        return {
+            'vp_ratio': round(vp_ratio, 3),
+            'vp_confirming': vp_confirming,
+            'avg_vol_up': avg_vol_up,
+            'avg_vol_down': avg_vol_down,
+            'trend_for_vp': trend_for_vp,
+        }
+    except Exception:
+        return None
+
+
+def calculate_trade_quality(res):
+    """
+    Trade Quality Score (0-10) — How good is the current setup?
+    
+    This is SEPARATE from predictability. Predictability asks "does this stock 
+    have exploitable patterns?" Quality asks "given it does, is NOW a good time?"
+    
+    Components (each 0-2 points):
+    1. Multi-timeframe trend alignment (1M, 3M, 6M, 1Y agree?)
+    2. Entry timing via Z-EMA (sweet spot vs overbought/oversold?)
+    3. Risk-adjusted returns (Sharpe quality)
+    4. Volatility appropriateness (moderate = best for trading)
+    5. Volume-price confirmation (volume supports the trend?)
+    
+    Returns: {
+        'trade_quality': float (0-10),
+        'quality_components': dict of component scores,
+        'quality_label': str ('Excellent'/'Good'/'Fair'/'Poor')
+    }
+    """
+    components = {}
+    total = 0.0
+    
+    # ── 1. MULTI-TIMEFRAME ALIGNMENT (0-2) ──────────────────────────────
+    # Do 1M, 3M, 6M, 1Y returns all point the same direction?
+    returns = []
+    for key in ['recent_return_1m', 'recent_return_3m', 'recent_return_6m', 'recent_return_1y']:
+        val = res.get(key)
+        if val is not None:
+            returns.append(val)
+    
+    if len(returns) >= 3:
+        positive = sum(1 for r in returns if r > 0.02)
+        negative = sum(1 for r in returns if r < -0.02)
+        total_periods = len(returns)
+        
+        alignment = max(positive, negative) / total_periods
+        
+        if alignment >= 1.0:
+            components['trend_alignment'] = 2.0  # All agree
+        elif alignment >= 0.75:
+            components['trend_alignment'] = 1.5  # 3/4 agree
+        elif alignment >= 0.5:
+            components['trend_alignment'] = 0.8  # Mixed
+        else:
+            components['trend_alignment'] = 0.3  # Conflicting
+    else:
+        components['trend_alignment'] = 0.5  # Insufficient data
+    
+    total += components['trend_alignment']
+    
+    # ── 2. ENTRY TIMING VIA Z-EMA (0-2) ─────────────────────────────────
+    # In an uptrend: Z-EMA between -0.5 and 0.5 is ideal
+    # In a downtrend: Z-EMA between -0.5 and 0.5 is ideal for shorting
+    # Extremes (>1.5 or <-1.5) = bad entry timing
+    z_ema = res.get('z_ema')
+    trend = res.get('trend_direction')
+    
+    if z_ema is not None:
+        abs_z = abs(z_ema)
+        
+        if trend == 'UP':
+            if z_ema < -0.5:
+                components['entry_timing'] = 2.0   # Pullback in uptrend = great entry
+            elif z_ema < 0.5:
+                components['entry_timing'] = 1.5   # Normal zone
+            elif z_ema < 1.0:
+                components['entry_timing'] = 1.0   # Slightly extended
+            elif z_ema < 1.5:
+                components['entry_timing'] = 0.5   # Overbought
+            else:
+                components['entry_timing'] = 0.0   # Very overbought
+        elif trend == 'DOWN':
+            if z_ema > 0.5:
+                components['entry_timing'] = 2.0   # Bounce in downtrend = great short entry
+            elif z_ema > -0.5:
+                components['entry_timing'] = 1.5   # Normal zone
+            elif z_ema > -1.0:
+                components['entry_timing'] = 1.0   # Slightly extended
+            elif z_ema > -1.5:
+                components['entry_timing'] = 0.5   # Oversold
+            else:
+                components['entry_timing'] = 0.0   # Very oversold
+        else:
+            # Neutral trend — middle Z-EMA is fine, extremes are risky
+            if abs_z < 0.5:
+                components['entry_timing'] = 1.5
+            elif abs_z < 1.0:
+                components['entry_timing'] = 1.0
+            else:
+                components['entry_timing'] = 0.3
+    else:
+        components['entry_timing'] = 0.5
+    
+    total += components['entry_timing']
+    
+    # ── 3. RISK-ADJUSTED RETURNS / SHARPE (0-2) ─────────────────────────
+    sharpe = res.get('sharpe')
+    
+    if sharpe is not None:
+        if sharpe > 1.5:
+            components['sharpe_quality'] = 2.0
+        elif sharpe > 1.0:
+            components['sharpe_quality'] = 1.5
+        elif sharpe > 0.5:
+            components['sharpe_quality'] = 1.0
+        elif sharpe > 0:
+            components['sharpe_quality'] = 0.5
+        elif sharpe > -0.5:
+            components['sharpe_quality'] = 0.2
+        else:
+            components['sharpe_quality'] = 0.0
+    else:
+        components['sharpe_quality'] = 0.5
+    
+    total += components['sharpe_quality']
+    
+    # ── 4. VOLATILITY APPROPRIATENESS (0-2) ──────────────────────────────
+    # Moderate volatility (20-40%) is ideal: enough movement to profit,
+    # not so much that stops get blown out
+    vol = res.get('volatility')
+    
+    if vol is not None:
+        if 20 <= vol <= 35:
+            components['volatility_fit'] = 2.0    # Sweet spot
+        elif 15 <= vol <= 45:
+            components['volatility_fit'] = 1.5    # Acceptable
+        elif 10 <= vol <= 55:
+            components['volatility_fit'] = 0.8    # Marginal
+        else:
+            components['volatility_fit'] = 0.3    # Too calm or too wild
+    else:
+        components['volatility_fit'] = 0.5
+    
+    total += components['volatility_fit']
+    
+    # ── 5. VOLUME-PRICE CONFIRMATION (0-2) ───────────────────────────────
+    vp = res.get('volume_price_data')
+    
+    if vp is not None and vp.get('vp_confirming') is not None:
+        if vp['vp_confirming']:
+            # Volume confirms trend
+            ratio = vp['vp_ratio']
+            if vp['trend_for_vp'] == 'UP':
+                # How strongly does volume confirm uptrend?
+                if ratio > 1.3:
+                    components['volume_confirmation'] = 2.0
+                elif ratio > 1.15:
+                    components['volume_confirmation'] = 1.5
+                else:
+                    components['volume_confirmation'] = 1.0
+            elif vp['trend_for_vp'] == 'DOWN':
+                # How strongly does volume confirm downtrend?
+                if ratio < 0.7:
+                    components['volume_confirmation'] = 2.0
+                elif ratio < 0.85:
+                    components['volume_confirmation'] = 1.5
+                else:
+                    components['volume_confirmation'] = 1.0
+            else:
+                components['volume_confirmation'] = 0.5
+        else:
+            # Volume does NOT confirm trend — warning sign
+            components['volume_confirmation'] = 0.2
+    else:
+        components['volume_confirmation'] = 0.5  # No data
+    
+    total += components['volume_confirmation']
+    
+    # ── FINAL SCORE ──────────────────────────────────────────────────────
+    total = round(min(10.0, total), 1)
+    
+    if total >= 8.0:
+        label = 'Excellent'
+    elif total >= 6.0:
+        label = 'Good'
+    elif total >= 4.0:
+        label = 'Fair'
+    else:
+        label = 'Poor'
+    
+    return {
+        'trade_quality': total,
+        'quality_components': components,
+        'quality_label': label,
+    }
 
 
 def calculate_amihud_illiquidity(df):
@@ -133,7 +623,7 @@ def get_liquidity_warning(liquidity_score, position_size_vs_volume, amihud_illiq
 
 exchange_to_currency = {'T': 'JPY', 'NYB': '', 'CO': 'DKK', 'L': 'GBP or GBX', 'DE': 'EUR', 'PA': 'EUR', 'TO': 'CAD', 'V': 'CAD'}
 
-def analyze_stock(ticker, period="5y", window_days=5, account_size=10000, risk_per_trade=0.02):
+def analyze_stock(ticker, period="5y", window_days=5, account_size=10000, risk_per_trade=0.02, n_shuffles=50):
     try:
         df = yf.download([ticker], period=period, progress=False)
     except Exception:
@@ -180,10 +670,8 @@ def analyze_stock(ticker, period="5y", window_days=5, account_size=10000, risk_p
     OHLC['Date'] = pd.to_datetime(OHLC['Date']).dt.strftime('%Y-%m-%d')
 
     df['Return'] = df['Close'].pct_change()
-    df['Return_Window'] = df['Close'].pct_change(window_days)
 
     returns = df['Return'].dropna().values
-    returns_window = df['Return_Window'].dropna().values
 
     res = {
         'ticker': ticker,
@@ -191,6 +679,8 @@ def analyze_stock(ticker, period="5y", window_days=5, account_size=10000, risk_p
         'period': period,
         'hurst': None,
         'hurst_oos': None,
+        'hurst_significant': None,
+        'hurst_shuffled_mean': None,
         'momentum_corr': None,
         'momentum_corr_oos': None,
         'lb_pvalue': None,
@@ -211,13 +701,20 @@ def analyze_stock(ticker, period="5y", window_days=5, account_size=10000, risk_p
         'recent_return_3m': None,
         'recent_return_1m': None,
         'trend_direction': None,
+        # Volume-Price Confirmation
+        'volume_price_data': None,
+        'vp_ratio': None,
+        'vp_confirming': None,
+        # Trade Quality Score
+        'trade_quality': None,
+        'quality_components': None,
+        'quality_label': None,
         # Position Sizing Fields
         'suggested_shares': None,
         'stop_loss_price': None,
         'position_risk_amount': None,
         'position_size_warning': None,
         'volatility_category': None,
-        'golden_cross_short': None,
         'final_signal': None,
         # Liquidity & Friction Analysis
         'avg_daily_volume': None,
@@ -240,6 +737,7 @@ def analyze_stock(ticker, period="5y", window_days=5, account_size=10000, risk_p
         'transaction_cost': 0.001,  # 0.1% per trade
         'slippage': 0.0005,  # 0.05%
         'risk_per_trade': risk_per_trade,  # Store user's risk tolerance
+        'account_size_input': account_size,  # Store for speculative position halving
     }
 
     # Split data: 70% train, 30% test for out-of-sample validation
@@ -248,8 +746,7 @@ def analyze_stock(ticker, period="5y", window_days=5, account_size=10000, risk_p
     df_test = df.iloc[split_idx:]
     
     returns_train = df_train['Return'].dropna().values
-    returns_window_train = df_train['Return_Window'].dropna().values
-    returns_window_test = df_test['Return_Window'].dropna().values
+    returns_test = df_test['Return'].dropna().values
 
     # CALCULATE RECENT RETURNS (for determining trend direction)
     current = df['Close'].iloc[-1]
@@ -356,8 +853,6 @@ def analyze_stock(ticker, period="5y", window_days=5, account_size=10000, risk_p
                     res['suggested_shares'] = whole_shares
                     
                     # CRITICAL FIX: Store both long and short stop loss prices
-                    # For LONGS: stop loss is BELOW current price (limit downside)
-                    # For SHORTS: stop loss is ABOVE current price (limit upside)
                     res['stop_loss_price_long'] = float(current - stop_loss_dist)
                     res['stop_loss_price_short'] = float(current + stop_loss_dist)
                     
@@ -436,23 +931,27 @@ def analyze_stock(ticker, period="5y", window_days=5, account_size=10000, risk_p
                     f"(with {risk_per_trade*100:.1f}% risk tolerance)."
                 )
 
-    # GOLDEN CROSS / DEATH CROSS
-    if len(df) >= 50:
-        sma_20 = df['Close'].rolling(window=20).mean().iloc[-1]
-        sma_50 = df['Close'].rolling(window=50).mean().iloc[-1]
-        ema_20 = df['Close'].ewm(span=20).mean().iloc[-1]
-        
-        if sma_20 is not None and sma_50 is not None:
-            res['golden_cross_short'] = float(sma_20) < float(sma_50)
+    # ═══════════════════════════════════════════════════════════════════════
+    # PREDICTABILITY SCORE (5 tests, each worth 1 point)
+    #
+    # 1. Momentum correlation (3-day blocks, |r| > 0.08)
+    # 2. Hurst/DFA (significant + regime detected)
+    # 3. Mean reversion (conditional reversal after extremes)
+    # 4. Regime stability OOS (pattern holds out-of-sample)
+    # 5. Volume-price confirmation (volume supports trend direction)
+    #
+    # Ljung-Box: still computed (informational) but NOT scored
+    #   — it's redundant with momentum correlation
+    # ADF: still computed (informational) but NOT scored
+    #   — most stocks are non-stationary, it rarely contributes
+    # ═══════════════════════════════════════════════════════════════════════
 
-    # Ljung-Box Test
+    # Ljung-Box Test (informational only — NOT scored)
     if len(returns_train) > 10:
         lb_test = acorr_ljungbox(returns_train, lags=[10], return_df=True)
         res['lb_pvalue'] = float(lb_test.iloc[0, 1])
-        if res['lb_pvalue'] < 0.05: 
-            res['predictability_score'] += 1
 
-    # ADF Test
+    # ADF Test (informational only — NOT scored)
     if len(df['Close'].dropna()) > 20:
         try:
             adf_result = adfuller(df['Close'].dropna())
@@ -460,84 +959,147 @@ def analyze_stock(ticker, period="5y", window_days=5, account_size=10000, risk_p
         except Exception: 
             pass
 
-    # Hurst Exponent
-    if len(returns_window_train) > 100:
+    # ═══════════════════════════════════════════════════════════════════════
+    # HURST EXPONENT (DFA with shuffled baseline)
+    # Uses Detrended Fluctuation Analysis instead of R/S for stability.
+    # Compares against shuffled baseline to verify significance.
+    # ═══════════════════════════════════════════════════════════════════════
+    if len(returns_train) > 100:
         try:
-            H, _, _, _ = hurst_exponent(returns_window_train)
+            H, H_shuf_mean, H_shuf_std, is_sig, _, _, _ = hurst_with_baseline(
+                returns_train, n_shuffles=n_shuffles
+            )
             if not np.isnan(H):
                 res['hurst'] = float(H)
-                if H > 0.55 or H < 0.45: 
+                res['hurst_significant'] = bool(is_sig)
+                if not np.isnan(H_shuf_mean):
+                    res['hurst_shuffled_mean'] = float(H_shuf_mean)
+                
+                # Only count toward predictability if significantly different from random
+                if is_sig and (H > 0.55 or H < 0.45):
                     res['predictability_score'] += 1
-        except Exception: 
+        except Exception:
             pass
     
-    # Hurst out-of-sample
-    if len(returns_window_test) > 100:
+    # Hurst out-of-sample (use fewer shuffles — just need regime check, not full significance)
+    oos_shuffles = max(10, n_shuffles // 3)
+    if len(returns_test) > 100:
         try:
-            H_oos, _, _, _ = hurst_exponent(returns_window_test)
+            H_oos, _, _, _, _, _, _ = hurst_with_baseline(returns_test, n_shuffles=oos_shuffles)
             if not np.isnan(H_oos):
                 res['hurst_oos'] = float(H_oos)
-        except Exception: 
+        except Exception:
             pass
 
-    # Momentum & Mean Reversion
-    if len(returns_window_train) > (window_days + 5):
-        m_corr = np.corrcoef(returns_window_train[:-1], returns_window_train[1:])[0, 1]
-        if not np.isnan(m_corr):
+    # ═══════════════════════════════════════════════════════════════════════
+    # MOMENTUM CORRELATION (Non-overlapping 3-day blocks)
+    # Measures: "Does the direction of this 3-day period predict the next?"
+    # 3-day blocks give ~400+ pairs from 5Y training data — enough for reliable
+    # correlation while capturing multi-day momentum (not just daily noise).
+    # No overlap = no bias correction needed.
+    #
+    # Typical 3-day block correlations: 0.05–0.15 for trending stocks
+    # Threshold: 0.08 (with ~400 pairs, t ≈ 0.08 * sqrt(400) ≈ 1.6)
+    # ═══════════════════════════════════════════════════════════════════════
+    if len(returns_train) > 30:
+        m_corr, n_pairs = multi_day_momentum_corr(returns_train, block_days=3)
+        if m_corr is not None:
             res['momentum_corr'] = float(m_corr)
-            if abs(m_corr) > 0.2: 
+            if abs(m_corr) > 0.08:
                 res['predictability_score'] += 1
 
-        # Mean Reversion Analysis
-        q75, q25 = np.percentile(returns_window_train, 75), np.percentile(returns_window_train, 25)
-        large_up = returns_window_train > q75
-        large_down = returns_window_train < q25
-        valid_idx = np.arange(len(returns_window_train) - window_days)
-        next_ret = returns_window_train[valid_idx + window_days]
-
-        up_moves = next_ret[large_up[valid_idx]]
-        dn_moves = next_ret[large_down[valid_idx]]
-
-        if len(up_moves) > 0: 
-            res['mean_rev_up'] = float(up_moves.mean())
-        if len(dn_moves) > 0: 
-            res['mean_rev_down'] = float(dn_moves.mean())
+        # Mean Reversion Analysis (non-overlapping blocks — appropriate here
+        # because we're asking "after a big 5-day move, what happens next?")
+        mean_rev_up, mean_rev_down = non_overlapping_mean_reversion(returns_train, window_days)
+        res['mean_rev_up'] = mean_rev_up
+        res['mean_rev_down'] = mean_rev_down
 
         # Score Mean Reversion
         if res['mean_rev_up'] is not None and res['mean_rev_down'] is not None:
-            if abs(res['mean_rev_up']) > 0.005 and abs(res['mean_rev_down']) > 0.005:
+            if abs(res['mean_rev_up']) > 0.003 and abs(res['mean_rev_down']) > 0.003:
                 res['predictability_score'] += 1
 
     # OUT-OF-SAMPLE TESTING
-    if len(returns_window_test) > (window_days + 5):
-        m_corr_oos = np.corrcoef(returns_window_test[:-1], returns_window_test[1:])[0, 1]
-        if not np.isnan(m_corr_oos):
+    if len(returns_test) > 30:
+        m_corr_oos, _ = multi_day_momentum_corr(returns_test, block_days=3)
+        if m_corr_oos is not None:
             res['momentum_corr_oos'] = float(m_corr_oos)
 
-        # Mean Reversion OOS
-        q75_oos, q25_oos = np.percentile(returns_window_test, 75), np.percentile(returns_window_test, 25)
-        large_up_oos = returns_window_test > q75_oos
-        large_down_oos = returns_window_test < q25_oos
-        valid_idx_oos = np.arange(len(returns_window_test) - window_days)
-        next_ret_oos = returns_window_test[valid_idx_oos + window_days]
-
-        up_moves_oos = next_ret_oos[large_up_oos[valid_idx_oos]]
-        dn_moves_oos = next_ret_oos[large_down_oos[valid_idx_oos]]
-
-        if len(up_moves_oos) > 0: 
-            res['mean_rev_up_oos'] = float(up_moves_oos.mean())
-        if len(dn_moves_oos) > 0: 
-            res['mean_rev_down_oos'] = float(dn_moves_oos.mean())
+        # Mean Reversion OOS (non-overlapping blocks)
+        mean_rev_up_oos, mean_rev_down_oos = non_overlapping_mean_reversion(returns_test, window_days)
+        res['mean_rev_up_oos'] = mean_rev_up_oos
+        res['mean_rev_down_oos'] = mean_rev_down_oos
 
     # REGIME STABILITY CHECK
+    # Asks: "Does the momentum pattern exist in BOTH periods with the SAME direction?"
+    # 
+    # Existence-based (not ratio-based):
+    # - Same sign AND OOS passes minimum threshold → STABLE (1.0)
+    # - Same sign but OOS below threshold → WEAK (0.5) 
+    # - Sign flip → UNSTABLE (0.0)
+    #
+    # With 3-day non-overlapping blocks, typical correlations are 0.05–0.15.
+    # OOS threshold: 0.05 (meaningful multi-day momentum at 3-day scale)
+    MOMENTUM_MIN_THRESHOLD = 0.05
+    
     if res.get('momentum_corr') is not None and res.get('momentum_corr_oos') is not None:
-        corr_in = abs(res['momentum_corr'])
-        corr_oos = abs(res['momentum_corr_oos'])
-        if corr_in > 0.01:
-            stability = corr_oos / corr_in
-            res['regime_stability'] = float(min(stability, 1.0))
+        corr_in = res['momentum_corr']
+        corr_oos = res['momentum_corr_oos']
+        
+        if abs(corr_in) > MOMENTUM_MIN_THRESHOLD:
+            same_sign = (corr_in > 0 and corr_oos > 0) or (corr_in < 0 and corr_oos < 0)
+            
+            if same_sign and abs(corr_oos) >= MOMENTUM_MIN_THRESHOLD:
+                # Pattern exists in both periods, same direction, both meaningful
+                res['regime_stability'] = 1.0
+            elif same_sign:
+                # Same direction but OOS is weak — partial confidence
+                res['regime_stability'] = 0.5
+            else:
+                # Sign flipped — pattern reversed out-of-sample
+                res['regime_stability'] = 0.0
         else:
-            res['regime_stability'] = float(corr_oos)
+            # In-sample momentum too weak to assess stability
+            res['regime_stability'] = 0.0
+    
+    # Also check Hurst stability if available
+    # If Hurst is significant in-sample, does the regime hold OOS?
+    if (res.get('hurst') is not None and res.get('hurst_oos') is not None 
+        and res.get('hurst_significant')):
+        hurst_in = res['hurst']
+        hurst_oos = res['hurst_oos']
+        
+        # Check if both agree on regime type (both trending, both mean-reverting, etc.)
+        in_trending = hurst_in > 0.55
+        in_reverting = hurst_in < 0.45
+        oos_trending = hurst_oos > 0.55
+        oos_reverting = hurst_oos < 0.45
+        
+        hurst_agrees = (in_trending and oos_trending) or (in_reverting and oos_reverting)
+        
+        # If Hurst regime disagrees OOS, cap stability at 0.5
+        if not hurst_agrees and res.get('regime_stability', 0) > 0.5:
+            res['regime_stability'] = 0.5
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # PREDICTABILITY TEST 4: Regime Stability OOS
+    # Does the momentum pattern hold out-of-sample?
+    # ═══════════════════════════════════════════════════════════════════════
+    if res.get('regime_stability') is not None and res['regime_stability'] >= 0.5:
+        res['predictability_score'] += 1
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # PREDICTABILITY TEST 5: Volume-Price Confirmation
+    # Does volume increase on moves in the trend direction?
+    # ═══════════════════════════════════════════════════════════════════════
+    vp_data = volume_price_confirmation(df, lookback=60)
+    if vp_data is not None:
+        res['volume_price_data'] = vp_data
+        res['vp_ratio'] = vp_data['vp_ratio']
+        res['vp_confirming'] = vp_data['vp_confirming']
+        
+        if vp_data['vp_confirming']:
+            res['predictability_score'] += 1
 
     # LIQUIDITY ANALYSIS
     # Calculate 30-day average volume
@@ -549,13 +1111,10 @@ def analyze_stock(ticker, period="5y", window_days=5, account_size=10000, risk_p
     res['amihud_illiquidity'] = amihud
     
     # Position size as % of daily volume
-    # IMPORTANT: Use the CALCULATED shares (before affordability check) for liquidity analysis
-    # We want to know if the INTENDED position would be too large, not just the affordable one
     if res.get('calculated_shares') and avg_vol_30 > 0:
         position_size_vs_vol = res['calculated_shares'] / avg_vol_30
         res['position_size_vs_volume'] = float(position_size_vs_vol)
     elif res['suggested_shares'] and avg_vol_30 > 0:
-        # Fallback: use suggested shares if we don't have calculated
         position_size_vs_vol = res['suggested_shares'] / avg_vol_30
         res['position_size_vs_volume'] = float(position_size_vs_vol)
     
@@ -564,33 +1123,25 @@ def analyze_stock(ticker, period="5y", window_days=5, account_size=10000, risk_p
     res['estimated_slippage_pct'] = dynamic_slippage * 100  # Convert to percentage
     
     # Total Friction (Slippage + Transaction Cost)
-    # Transaction cost is a % per round trip (in + out = 2x cost)
     total_friction = (dynamic_slippage + res['transaction_cost']) * 2
     res['total_friction_pct'] = float(total_friction * 100)
     
     # Calculate Expected Edge (PRELIMINARY - will be zeroed if pattern fails)
-    # Edge = Momentum correlation strength * Volatility (annual %)
-    # This represents the expected win rate * average move per trade
     if res['momentum_corr'] is not None and res['volatility'] is not None:
         expected_edge = abs(res['momentum_corr']) * res['volatility']
         res['expected_edge_pct'] = float(expected_edge)
     
-    # Is it liquid enough to trade? (PRELIMINARY - will be updated if pattern fails)
-    # Rule: Position must be < 2% of daily volume AND edge > 3x friction
-    # NOTE: This is about LIQUIDITY, not AFFORDABILITY
-    # If user can't afford the position, that's separate (position_size_note handles it)
+    # Is it liquid enough to trade?
     if (res['position_size_vs_volume'] is not None and 
         res['expected_edge_pct'] is not None and
         res['total_friction_pct'] is not None):
         
-        # Check if position is too large for the market
-        position_too_large = res['position_size_vs_volume'] >= 0.02  # 2% threshold
+        position_too_large = res['position_size_vs_volume'] >= 0.02
         edge_too_small = res['expected_edge_pct'] <= (res['total_friction_pct'] * 3)
         
         if position_too_large:
-            # Liquidity issue - position would move the market
             res['is_liquid_enough'] = False
-            res['liquidity_failed'] = True  # Flag this as liquidity failure, not pattern failure
+            res['liquidity_failed'] = True
             
             vol_pct = res['position_size_vs_volume'] * 100
             if vol_pct > 100:
@@ -612,23 +1163,19 @@ def analyze_stock(ticker, period="5y", window_days=5, account_size=10000, risk_p
                     f"This would impact the market. Consider reducing position size or spreading execution over time."
                 )
         elif edge_too_small:
-            # Edge too small - pattern might be weak but this is about costs
             res['is_liquid_enough'] = False
-            res['liquidity_failed'] = False  # This is edge failure, not liquidity
+            res['liquidity_failed'] = False
         else:
-            # All good
             res['is_liquid_enough'] = True
             res['liquidity_failed'] = False
     else:
-        # If we don't have position sizing (unaffordable), don't fail liquidity check
-        # The pattern might be good, just not executable with this account size
-        res['is_liquid_enough'] = True  # Don't fail pattern validation due to small account
+        res['is_liquid_enough'] = True
         res['liquidity_failed'] = False
     
     # Liquidity Quality Score
     res['liquidity_score'] = get_liquidity_score(amihud, res['position_size_vs_volume'])
     
-    # Liquidity Warning (only for CRITICAL issues, not edge-vs-friction)
+    # Liquidity Warning (only for CRITICAL issues)
     if res['liquidity_score'] == 'LOW' or res['position_size_vs_volume'] and res['position_size_vs_volume'] > 0.02:
         res['liquidity_warning'] = get_liquidity_warning(
             res['liquidity_score'],
@@ -640,50 +1187,82 @@ def analyze_stock(ticker, period="5y", window_days=5, account_size=10000, risk_p
     res['final_signal'] = generate_trading_signal(res)
     
     # ═══════════════════════════════════════════════════════════════════════
-    # CRITICAL FIX: Update stop loss based on final signal (LONG vs SHORT)
+    # Update stop loss based on final signal (LONG vs SHORT)
     # ═══════════════════════════════════════════════════════════════════════
     if res['final_signal'] and res.get('stop_loss_price_long') and res.get('stop_loss_price_short'):
-        # Determine if signal is for SHORT positions
         short_signals = [
-            'SHORT_DOWNTREND',
-            'SHORT_BOUNCES_ONLY',
-            'SHORT_MOMENTUM'
+            'SHORT_DOWNTREND', 'SHORT_BOUNCES_ONLY', 'SHORT_MOMENTUM',
+            'SPEC_SHORT_DOWNTREND', 'SPEC_SHORT_BOUNCES_ONLY', 'SPEC_SHORT_MOMENTUM',
+            'WAIT_OR_SHORT_BOUNCE', 'SPEC_WAIT_OR_SHORT_BOUNCE'
         ]
         
         if res['final_signal'] in short_signals:
-            # SHORT position: stop loss is ABOVE entry (limit upside risk)
             res['stop_loss_price'] = res['stop_loss_price_short']
         else:
-            # LONG position: stop loss is BELOW entry (limit downside risk)
             res['stop_loss_price'] = res['stop_loss_price_long']
     
     # ═══════════════════════════════════════════════════════════════════════
-    # CRITICAL FIX: Zero out edge if pattern failed statistical validation
+    # SPECULATIVE TIER: Halve position size for 2/4 predictability signals
+    # ═══════════════════════════════════════════════════════════════════════
+    if res['final_signal'] and res['final_signal'].startswith('SPEC_'):
+        if res.get('suggested_shares') is not None and res['suggested_shares'] > 1:
+            full_shares = res['suggested_shares']
+            half_shares = max(1, full_shares // 2)
+            res['suggested_shares'] = half_shares
+            res['speculative_full_shares'] = full_shares  # Store original for display
+            
+            # Update position note
+            position_value = half_shares * (res.get('current') or 0)
+            account = res.get('account_size_input', 10000)
+            position_pct = (position_value / account) * 100 if account > 0 else 0
+            res['position_size_note'] = (
+                f"⚠ SPECULATIVE: Position halved from {full_shares} to {half_shares} shares "
+                f"({position_pct:.1f}% of account). Only {res.get('predictability_score', 0)}/5 statistical tests passed — "
+                f"reduced position size limits downside from weaker conviction."
+            )
+    
+    # ═══════════════════════════════════════════════════════════════════════
+    # TRADE QUALITY SCORE (0-10)
+    # Synthesizes descriptive stats into a single "how good is this setup?"
+    # Only meaningful for tradeable signals — skip for DO_NOT_TRADE
+    # ═══════════════════════════════════════════════════════════════════════
+    if res['final_signal'] and res['final_signal'] not in ('DO_NOT_TRADE', 'NO_CLEAR_SIGNAL'):
+        quality = calculate_trade_quality(res)
+        res['trade_quality'] = quality['trade_quality']
+        res['quality_components'] = quality['quality_components']
+        res['quality_label'] = quality['quality_label']
+    
+    # ═══════════════════════════════════════════════════════════════════════
+    # Zero out edge if pattern failed statistical validation
     # BUT NOT if liquidity failed (position too large) - that's a different issue
     # ═══════════════════════════════════════════════════════════════════════
     if res['final_signal'] in ['DO_NOT_TRADE', 'NO_CLEAR_SIGNAL'] and not res.get('liquidity_failed', False):
-        # Pattern is unreliable - no exploitable edge exists
         res['expected_edge_pct'] = 0.0
         
-        # Build detailed failure explanation
         validation_failures = []
         
-        if res.get('predictability_score', 0) < 3:
-            validation_failures.append(f"Predictability score {res['predictability_score']}/4 (need ≥3)")
+        if res.get('predictability_score', 0) < 2:
+            validation_failures.append(f"Predictability score {res['predictability_score']}/5 (need ≥2)")
         
-        if res.get('regime_stability') is not None and res.get('regime_stability') < 0.7:
-            validation_failures.append(f"Regime stability {res['regime_stability']*100:.0f}% (need ≥70%)")
+        if res.get('regime_stability') is not None and res.get('regime_stability') < 0.5:
+            if res.get('regime_stability') == 0.0:
+                validation_failures.append("Regime stability 0% — momentum direction REVERSED out-of-sample")
+            else:
+                validation_failures.append(f"Regime stability {res['regime_stability']*100:.0f}% (need ≥50%)")
         
-        if res.get('lb_pvalue') is not None and res.get('lb_pvalue') >= 0.05:
-            validation_failures.append(f"No autocorrelation (Ljung-Box p={res['lb_pvalue']:.3f})")
+        if res.get('momentum_corr') is not None and abs(res['momentum_corr']) <= 0.08:
+            validation_failures.append(f"Weak momentum (|r|={abs(res['momentum_corr']):.3f}, need >0.08)")
         
-        if res.get('adf_pvalue') is not None and res.get('adf_pvalue') >= 0.05:
-            validation_failures.append(f"Non-stationary (ADF p={res['adf_pvalue']:.3f})")
+        if res.get('hurst_significant') is False:
+            validation_failures.append("Hurst exponent not distinguishable from random (failed baseline test)")
         
-        if res.get('momentum_corr') is not None and abs(res['momentum_corr']) <= 0.1:
-            validation_failures.append(f"Weak momentum (|r|={abs(res['momentum_corr']):.3f})")
+        if res.get('vp_confirming') is False or res.get('vp_confirming') is None:
+            vp_ratio = res.get('vp_ratio')
+            if vp_ratio is not None:
+                validation_failures.append(f"Volume doesn't confirm trend (up/down vol ratio: {vp_ratio:.2f})")
+            else:
+                validation_failures.append("Volume-price confirmation unavailable")
         
-        # Set comprehensive warning (only if NOT liquidity failure)
         if validation_failures:
             failure_msg = "; ".join(validation_failures)
             res['liquidity_warning'] = f"Pattern failed statistical validation: {failure_msg}. No exploitable edge exists."
@@ -697,112 +1276,108 @@ def generate_trading_signal(res):
     """
     Generate final trading signal based on all metrics.
     
-    Core logic: 
-    - Momentum determines if trends persist or reverse
-    - Trend direction determines if we go LONG or SHORT
-    - Hurst & Z-EMA refine entry/exit zones
-    - Death cross is implicit in trend analysis (not a veto)
+    PREDICTABILITY SCORE: Now 0-5 (was 0-4):
+      1. Momentum correlation  2. Hurst/DFA  3. Mean reversion
+      4. Regime stability OOS  5. Volume-price confirmation
     
-    CRITICAL CHECKS (in order):
-    1. Predictability score must be >= 3 (high conviction, not participation trophy)
-    2. Regime stability must be >= 0.7 (pattern must hold out-of-sample)
-    3. Liquidity must be adequate (edge must cover friction costs)
-    4. Momentum must be strong enough (> 0.1)
-    5. Trend must be clear (UP or DOWN, not NEUTRAL)
+    TWO TIERS:
+    - HIGH CONVICTION (predictability ≥3/5): Full position, standard signals
+    - SPECULATIVE (predictability 2/5): Reduced position, extra warnings
+      Still requires: stability ≥50%, edge > 3x friction, momentum > 0.08
+    
+    Hard rejections (any predictability):
+    - Regime stability 0% (sign flip) → DO_NOT_TRADE
+    - Not liquid enough → DO_NOT_TRADE
+    - Predictability < 2 → DO_NOT_TRADE
     """
     
-    # CHECK 1: Predictability Score - Requires HIGH conviction (3+ out of 4 tests)
-    # Not a participation trophy! Needs strong evidence across multiple metrics
-    if res.get('predictability_score', 0) < 3:
+    # HARD GATE: Minimum predictability
+    pred_score = res.get('predictability_score', 0)
+    if pred_score < 2:
         return 'DO_NOT_TRADE'
     
-    # CHECK 2: Regime Stability - Pattern must be robust out-of-sample
-    # Stricter threshold (0.7 instead of 0.6): pattern must hold up in test period
-    if res.get('regime_stability') is not None and res.get('regime_stability') < 0.7:
+    # HARD GATE: Regime Stability (no sign flips)
+    if res.get('regime_stability') is not None and res.get('regime_stability') < 0.5:
         return 'DO_NOT_TRADE'
     
-    # CHECK 3: Liquidity & Edge Analysis - Friction costs must not eat profits
-    # If edge doesn't cover friction, it's not tradeable no matter how good the pattern
+    # HARD GATE: Liquidity & Edge
     if not res.get('is_liquid_enough', False):
         return 'DO_NOT_TRADE'
     
-    # CHECK 4: Momentum Detection - Must show persistence or reversal
+    # Determine tier
+    is_speculative = pred_score < 3  # 2/4 = speculative
+    
+    # Momentum check
     momentum = res.get('momentum_corr')
-    if momentum is None or abs(momentum) <= 0.1:
+    if momentum is None or abs(momentum) <= 0.08:
         return 'NO_CLEAR_SIGNAL'
     
-    # CHECK 5: Trend Direction - Must be clear (UP or DOWN)
-    # NEUTRAL trends without strong momentum = skip
+    # Trend direction
     trend = res.get('trend_direction')
     if trend not in ['UP', 'DOWN']:
-        # NEUTRAL trend or no clear direction
-        if abs(momentum) > 0.3:
-            return 'WAIT_FOR_TREND'  # Strong momentum but unclear direction
-        else:
-            return 'DO_NOT_TRADE'  # Weak signal in ambiguous market
-    
-    # Now safe to reference other fields
-    hurst = res.get('hurst')
-    z_ema = res.get('z_ema')
-    
-    # UPTREND ANALYSIS (momentum > 0.1 = trends continue)
-    if trend == 'UP':
-        if momentum > 0.1:
-            # Positive momentum in uptrend = FOLLOW THE UPTREND
-            if hurst is not None and hurst > 0.55:
-                # In trending regime - use Z-EMA to find good entries
-                if z_ema is not None:
-                    if z_ema > 1.0:
-                        return 'WAIT_PULLBACK'      # Overbought, wait for pullback
-                    elif z_ema > -0.5:
-                        return 'BUY_UPTREND'        # In sweet spot, buy
-                    else:
-                        return 'BUY_PULLBACK'       # Dip in uptrend, good entry
-                else:
-                    return 'BUY_UPTREND'
-            else:
-                # Not in trending regime but momentum positive
-                return 'BUY_MOMENTUM'
-        else:
-            # Negative momentum in uptrend = reversal signal
-            return 'WAIT_OR_SHORT_BOUNCE'
-    
-    # DOWNTREND ANALYSIS (momentum > 0.1 = trends continue downward)
-    elif trend == 'DOWN':
-        if momentum > 0.1:
-            # Positive momentum in downtrend = FOLLOW THE DOWNTREND
-            # (Counter-intuitive but correct: momentum means trends persist)
-            if hurst is not None and hurst > 0.55:
-                # In trending regime - use Z-EMA to find good short entries
-                if z_ema is not None:
-                    if z_ema < -1.0:
-                        return 'WAIT_SHORT_BOUNCE'      # Oversold, wait for bounce to short
-                    elif z_ema < 0.5:
-                        return 'SHORT_DOWNTREND'        # In sweet spot, short
-                    else:
-                        return 'SHORT_BOUNCES_ONLY'     # Bounce in downtrend, short the bounce
-                else:
-                    return 'SHORT_DOWNTREND'
-            else:
-                # Not in trending regime but momentum still positive (persistence)
-                return 'SHORT_MOMENTUM'
-        else:
-            # Negative momentum in downtrend = reversal/bounce possible
-            return 'WAIT_FOR_REVERSAL'
-    
-    # NEUTRAL TREND ANALYSIS (no clear direction)
-    # This is the catch-all that was previously allowing ambiguous trades
-    else:
-        # Neutral trend = no clear signal for directional trading
-        # Even if momentum is strong, we can't determine if it's up or down persistence
-        if abs(momentum) > 0.3:
-            # Strong momentum but no directional bias = wait for trend confirmation
+        if abs(momentum) > 0.15:
             return 'WAIT_FOR_TREND'
         else:
-            # Weak momentum + neutral trend = not tradeable
             return 'DO_NOT_TRADE'
-
-
-if __name__ == "__main__":
-    from info import interpret
-    interpret(analyze_stock("PLTR", window_days=5))
+    
+    # Reference fields for entry refinement
+    hurst = res.get('hurst')
+    z_ema = res.get('z_ema')
+    hurst_significant = res.get('hurst_significant', False)
+    
+    # ─── GENERATE SIGNAL ────────────────────────────────────────────────
+    signal = None
+    
+    if trend == 'UP':
+        if momentum > 0.08:
+            if hurst_significant and hurst is not None and hurst > 0.55:
+                if z_ema is not None:
+                    if z_ema > 1.0:
+                        signal = 'WAIT_PULLBACK'
+                    elif z_ema > -0.5:
+                        signal = 'BUY_UPTREND'
+                    else:
+                        signal = 'BUY_PULLBACK'
+                else:
+                    signal = 'BUY_UPTREND'
+            else:
+                signal = 'BUY_MOMENTUM'
+        else:
+            signal = 'WAIT_OR_SHORT_BOUNCE'
+    
+    elif trend == 'DOWN':
+        if momentum > 0.08:
+            if hurst_significant and hurst is not None and hurst > 0.55:
+                if z_ema is not None:
+                    if z_ema < -1.0:
+                        signal = 'WAIT_SHORT_BOUNCE'
+                    elif z_ema < 0.5:
+                        signal = 'SHORT_DOWNTREND'
+                    else:
+                        signal = 'SHORT_BOUNCES_ONLY'
+                else:
+                    signal = 'SHORT_DOWNTREND'
+            else:
+                signal = 'SHORT_MOMENTUM'
+        else:
+            signal = 'WAIT_FOR_REVERSAL'
+    
+    else:
+        if abs(momentum) > 0.15:
+            signal = 'WAIT_FOR_TREND'
+        else:
+            signal = 'DO_NOT_TRADE'
+    
+    # ─── APPLY SPECULATIVE PREFIX ───────────────────────────────────────
+    # For 2/4 predictability: prefix actionable signals with SPEC_
+    # WAIT/DO_NOT_TRADE signals don't need speculative prefix
+    if is_speculative and signal is not None:
+        actionable_signals = [
+            'BUY_UPTREND', 'BUY_PULLBACK', 'BUY_MOMENTUM',
+            'SHORT_DOWNTREND', 'SHORT_BOUNCES_ONLY', 'SHORT_MOMENTUM',
+            'WAIT_OR_SHORT_BOUNCE', 'WAIT_FOR_REVERSAL'
+        ]
+        if signal in actionable_signals:
+            signal = 'SPEC_' + signal
+    
+    return signal or 'DO_NOT_TRADE'

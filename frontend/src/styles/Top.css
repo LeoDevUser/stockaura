@@ -95,6 +95,13 @@
   color: #fff;
 }
 
+.filter-buttons button.speculative:hover,
+.filter-buttons button.speculative.active {
+  border-color: #f97316;
+  background: #f97316;
+  color: #000;
+}
+
 .filter-buttons button.wait:hover,
 .filter-buttons button.wait.active {
   border-color: #f59e0b;
@@ -126,6 +133,16 @@
   border-color: #ff9500;
   transform: translateY(-4px);
   box-shadow: 0 8px 20px rgba(255, 149, 0, 0.2);
+}
+
+/* Speculative Card */
+.stock-card.speculative-card {
+  border-left: 3px solid #f97316;
+}
+
+.stock-card.speculative-card:hover {
+  border-color: #f97316;
+  box-shadow: 0 8px 20px rgba(249, 115, 22, 0.2);
 }
 
 /* Stock Header */
@@ -289,6 +306,10 @@
 
 .stock-card:hover .click-hint {
   color: #ff9500;
+}
+
+.stock-card.speculative-card:hover .click-hint {
+  color: #f97316;
 }
 
 /* No Results Message */

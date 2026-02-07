@@ -1,24 +1,31 @@
 export const tooltipContent = {
   predictabilityScore: (
     <>
-      <strong>Predictability Score (0-4)</strong>
+      <strong>Predictability Score (0-5)</strong>
       <p>Measures how many statistical tests the stock passes. Each test validates whether the stock has exploitable patterns:</p>
       <ul>
-        <li><strong>Ljung-Box Test:</strong> Detects autocorrelation (past prices predict future)</li>
-        <li><strong>Hurst Exponent:</strong> Identifies trending vs mean-reverting behavior</li>
-        <li><strong>Momentum Correlation:</strong> Measures if price movements continue or reverse</li>
+        <li><strong>Momentum Correlation:</strong> Measures if 3-day price blocks predict the next block (non-overlapping)</li>
+        <li><strong>Hurst Exponent (DFA):</strong> Identifies trending vs mean-reverting behavior, validated against shuffled baseline</li>
         <li><strong>Mean Reversion:</strong> Tests if extreme moves tend to reverse</li>
+        <li><strong>Regime Stability OOS:</strong> Does the pattern hold on unseen data? (was a hard gate, now also scored)</li>
+        <li><strong>Volume-Price Confirmation:</strong> Does volume increase on moves in the trend direction?</li>
       </ul>
-      <p><strong>Need ≥3/4 to trade.</strong> Higher score = more reliable patterns.</p>
+      <p><strong>≥3/5 = High Conviction</strong> (full position). <strong>2/5 = Speculative</strong> (half position, extra warnings). <strong>&lt;2/5 = DO NOT TRADE.</strong></p>
+      <p><em>Ljung-Box and ADF are still displayed for reference but no longer scored (redundant with momentum).</em></p>
     </>
   ),
 
   regimeStability: (
     <>
       <strong>Regime Stability (Out-of-Sample)</strong>
-      <p>Measures if the stock's pattern holds up on unseen data (30% test set).</p>
-      <p><strong>70%+ required:</strong> Pattern must remain consistent when tested on new data.</p>
-      <p>If patterns break down out-of-sample, they're likely random noise, not real edges.</p>
+      <p>Measures if the stock's pattern holds up on unseen data (30% test set). <strong>Now also counts toward the predictability score.</strong></p>
+      <p><strong>How it works:</strong> Checks if momentum direction (positive/negative) is the same in training and test data.</p>
+      <ul>
+        <li><strong>100%:</strong> Same direction, both above minimum threshold</li>
+        <li><strong>50%:</strong> Same direction, but OOS is weak — partial confidence</li>
+        <li><strong>0%:</strong> Direction REVERSED — pattern is unreliable</li>
+      </ul>
+      <p><strong>Need ≥50% to trade.</strong> A sign flip (0%) means the pattern you'd trade on doesn't hold in new data.</p>
     </>
   ),
 
@@ -62,16 +69,16 @@ export const tooltipContent = {
 
   hurstExponent: (
     <>
-      <strong>Hurst Exponent</strong>
-      <p>Identifies market regime:</p>
+      <strong>Hurst Exponent (DFA)</strong>
+      <p>Identifies market regime using Detrended Fluctuation Analysis — more robust than traditional R/S analysis:</p>
       <ul>
         <li><strong>H &lt; 0.45:</strong> Mean-reverting (extremes reverse)</li>
         <li><strong>H = 0.5:</strong> Random walk (no pattern)</li>
         <li><strong>H &gt; 0.55:</strong> Trending (momentum persists)</li>
       </ul>
+      <p><strong>Baseline test:</strong> Compared against 50 shuffled versions of the same data. If the real Hurst isn't significantly different from shuffled (which should be ~0.5), the regime detection is likely noise.</p>
       <p><strong>In-Sample:</strong> Historical training data</p>
       <p><strong>Out-of-Sample:</strong> Test data (30%)</p>
-      <p>Both should agree for reliable regime detection.</p>
     </>
   ),
 
@@ -101,28 +108,29 @@ export const tooltipContent = {
 
   momentumCorrelation: (
     <>
-      <strong>Momentum Correlation</strong>
-      <p>Measures if returns continue (positive) or reverse (negative).</p>
+      <strong>Momentum Correlation (3-Day Blocks)</strong>
+      <p>Measures if multi-day price movements continue or reverse, using non-overlapping 3-day blocks.</p>
+      <p><strong>What it asks:</strong> "Does the direction of this 3-day period predict the next 3-day period?"</p>
       <ul>
-        <li><strong>&gt;0.1:</strong> Positive momentum (trends continue)</li>
-        <li><strong>&lt;-0.1:</strong> Negative momentum (trends reverse)</li>
-        <li><strong>-0.1 to 0.1:</strong> Weak/no pattern</li>
+        <li><strong>&gt;0.08:</strong> Positive momentum (trends continue over days/weeks)</li>
+        <li><strong>&lt;-0.08:</strong> Negative momentum (trends reverse over days/weeks)</li>
+        <li><strong>-0.08 to 0.08:</strong> Weak/no pattern</li>
       </ul>
-      <p><strong>Need |correlation| &gt; 0.1 to trade.</strong></p>
-      <p>In-Sample = training data, Out-of-Sample = test data.</p>
+      <p><strong>Why 3-day blocks?</strong> Non-overlapping = no bias. 3-day blocks give ~400 pairs from 5 years of data — enough for reliable statistics while capturing multi-day momentum (not just daily noise).</p>
+      <p><strong>Need |correlation| &gt; 0.08 to trade.</strong></p>
     </>
   ),
 
   meanReversion: (
     <>
       <strong>Mean Reversion After Large Moves</strong>
-      <p>After a large up/down move (top/bottom 25%), what happens next?</p>
+      <p>After a large up/down block (top/bottom 25%), what happens in the next independent block?</p>
       <ul>
         <li><strong>Negative value:</strong> Reverses (mean-reverts)</li>
         <li><strong>Positive value:</strong> Continues (momentum)</li>
         <li><strong>Near zero:</strong> No pattern</li>
       </ul>
-      <p>Larger absolute values = stronger pattern.</p>
+      <p>Uses non-overlapping windows for unbiased measurement.</p>
     </>
   ),
 
