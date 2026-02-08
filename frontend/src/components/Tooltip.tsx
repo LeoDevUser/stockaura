@@ -8,16 +8,14 @@ interface TooltipProps {
 
 export default function Tooltip({ content, position = 'top' }: TooltipProps) {
   const [isVisible, setIsVisible] = useState(false)
+  const [isCliked, setIsClicked] = useState(false)
   const [adjustedPosition, setAdjustedPosition] = useState(position)
   const tooltipRef = useRef<HTMLDivElement>(null)
-  const triggerRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
-    if (isVisible && tooltipRef.current && triggerRef.current) {
+    if (isVisible && tooltipRef.current) {
       const tooltip = tooltipRef.current
-      const trigger = triggerRef.current
       const rect = tooltip.getBoundingClientRect()
-      const triggerRect = trigger.getBoundingClientRect()
 
       // Check if tooltip goes off screen and adjust position
       if (position === 'top' && rect.top < 0) {
@@ -35,10 +33,11 @@ export default function Tooltip({ content, position = 'top' }: TooltipProps) {
   return (
     <div className="tooltip-wrapper">
       <button
-        ref={triggerRef}
         className="tooltip-trigger"
-		onClick={() => setIsVisible(!isVisible)}
-		onBlur={() => setIsVisible(false)}
+		onClick={() => {setIsVisible(!isVisible); setIsClicked(!isCliked)}}
+		onMouseOver={() => setIsVisible(true)}
+		onMouseOut={() => setIsVisible(false || isCliked)}
+		onBlur={() => {setIsVisible(false); setIsClicked(false)}}
         aria-label="More information"
         type="button"
       >
