@@ -154,7 +154,7 @@ export default function ResultsPage() {
     return 'Random Walk'
   }
 
-  if (loading) return <div className="loading-page"><p>Loading...</p></div>
+  if (loading) return <div className="loading-page"><p>Analyzing Stock...</p></div>
 
   if (results?.error) return (
     <div className="delisted-container" onClick={() => navigate('/')}>

@@ -76,6 +76,12 @@
   border: 1px solid #f59e0b;
 }
 
+.badge.risk-n\/a{
+  background: rgba(136, 136, 136, 0.15);
+  color: #e0e0e0;
+  border: 1px solid #e0e0e0;
+}
+
 .badge.risk-high {
   background: rgba(239, 68, 68, 0.15);
   color: #ef4444;
