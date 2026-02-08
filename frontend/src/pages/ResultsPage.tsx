@@ -99,31 +99,29 @@ export default function ResultsPage() {
   const [results, setResults] = useState<AnalysisResult | null>(null)
   const [loading, setLoading] = useState<boolean>(true)
   const [transactionCost, setTransactionCost] = useState<number>(0.001) // Default 0.1%
-  const [accountSize, setAccountSize] = useState<number>(10000) // Default $10,000
+  const [tradeSize, setTradeSize] = useState<number>(10000) // Default $10,000
   const [riskTolerance, setRiskTolerance] = useState<number>(2) // Default 2%
-  const [debouncedAccountSize, setDebouncedAccountSize] = useState<number>(10000) // Debounced value
-  const [debouncedRiskTolerance, setDebouncedRiskTolerance] = useState<number>(2) // Debounced value
+  const [debouncedTradeSize, setDebouncedTradeSize] = useState<number>(10000)
+  const [debouncedRiskTolerance, setDebouncedRiskTolerance] = useState<number>(2)
   const navigate = useNavigate()
 
   const handleNavigate = (ticker: string) => {
     navigate(`/results?ticker=${ticker}`)
   }
 
-  // Debounce account size changes (wait 800ms after user stops typing)
+  // Debounce trade size changes
   useEffect(() => {
     const timer = setTimeout(() => {
-      setDebouncedAccountSize(accountSize)
+      setDebouncedTradeSize(tradeSize)
     }, 800)
-
     return () => clearTimeout(timer)
-  }, [accountSize])
+  }, [tradeSize])
 
-  // Debounce risk tolerance changes (wait 800ms after user stops typing)
+  // Debounce risk tolerance changes
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedRiskTolerance(riskTolerance)
     }, 800)
-
     return () => clearTimeout(timer)
   }, [riskTolerance])
 
@@ -133,7 +131,7 @@ export default function ResultsPage() {
       try {
         setLoading(true)
         const response = await fetch(
-          `/api/analyze?ticker=${ticker}&period=5y&window_days=5&account_size=${debouncedAccountSize}&risk_per_trade=${debouncedRiskTolerance / 100}`
+          `/api/analyze?ticker=${ticker}&period=5y&window_days=5&account_size=${debouncedTradeSize}&risk_per_trade=${debouncedRiskTolerance / 100}`
         )
         const data: AnalysisResult = await response.json()
         setResults(data)
@@ -144,7 +142,7 @@ export default function ResultsPage() {
       }
     }
     fetchResults()
-  }, [ticker, debouncedAccountSize, debouncedRiskTolerance])
+  }, [ticker, debouncedTradeSize, debouncedRiskTolerance])
 
   // Determine market regime description
   const getRegimeDescription = (): string => {
@@ -194,19 +192,19 @@ export default function ResultsPage() {
       <div className="trading-parameters-input">
         <div className="parameter-group">
           <label>
-            <span>Account Size:</span>
+            <span>Trade Size:</span>
             <input
               type="number"
-              value={accountSize}
-              onChange={(e) => setAccountSize(parseFloat(e.target.value) || 10000)}
+              value={tradeSize}
+              onChange={(e) => setTradeSize(parseFloat(e.target.value) || 10000)}
               step={1000}
               min={1}
             />
             <span>$</span>
           </label>
           <small>
-            Total portfolio value for position sizing
-            {accountSize !== debouncedAccountSize && (
+            Capital allocated to this trade
+            {tradeSize !== debouncedTradeSize && (
               <span style={{ color: '#f59e0b', marginLeft: '0.5em' }}>
                 ⏳ Updating...
               </span>
@@ -228,7 +226,7 @@ export default function ResultsPage() {
             <span>%</span>
           </label>
           <small>
-            Max loss per trade (1% = conservative, 100% = yolo)
+            Stop loss trigger (% drawdown from entry, 100% = no stop loss)
             {riskTolerance !== debouncedRiskTolerance && (
               <span style={{ color: '#f59e0b', marginLeft: '0.5em' }}>
                 ⏳ Updating...
@@ -344,7 +342,6 @@ export default function ResultsPage() {
           <div className="section statistical-engine">
             <h3>Statistical Tests</h3>
 
-            {/* ── SCORED PREDICTABILITY TESTS (5 tests, each worth 1 point) ── */}
             <div style={{ 
               marginBottom: '1.5em', 
               padding: '0.75em', 
@@ -566,7 +563,7 @@ export default function ResultsPage() {
 
       {/* UNIFIED TRADING VERDICT */}
       <div className="trading-verdict-section">
-        <TradingVerdict results={results} transactionCost={transactionCost} accountSize={accountSize} />
+        <TradingVerdict results={results} transactionCost={transactionCost} tradeSize={tradeSize} />
       </div>
 
       {/* DETAILED METRICS SECTION (Collapsible) */}

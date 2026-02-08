@@ -163,10 +163,6 @@ def hurst_with_baseline(series, n_shuffles=50, **kwargs):
     H_shuf_std = np.std(shuffled_hursts)
     
     # Significant if real H is >1.5 standard deviations from shuffled mean
-    # 1.5σ (~13% single-test FPR) is appropriate here because:
-    # - This is one of 4 gates, not a standalone decision (combined FPR is much lower)
-    # - 50 shuffles gives ~10% uncertainty on σ itself, making 2σ overly strict
-    # - Could alternatively use 100 shuffles + 2σ for tighter estimates
     if H_shuf_std > 0:
         z_score = abs(H - H_shuf_mean) / H_shuf_std
         is_significant = z_score > 1.5
@@ -181,13 +177,6 @@ def multi_day_momentum_corr(daily_returns, block_days=3):
     Calculate momentum correlation using NON-OVERLAPPING multi-day blocks.
     
     Measures: "Does the direction of this 3-day period predict the next 3-day period?"
-    This is a medium-term signal (days-to-weeks timeframe).
-    
-    Why 3-day blocks (not 5-day):
-    - 5-day blocks from 5Y training data → ~250 blocks → ~125 pairs → too noisy
-    - 3-day blocks from 5Y training data → ~416 blocks → ~208 pairs → solid sample
-    - 3 days still captures multi-day momentum, not just daily noise
-    - No overlap = no bias, no corrections needed
     
     Returns: (correlation, n_pairs) or (None, 0)
     """
@@ -279,22 +268,6 @@ def non_overlapping_mean_reversion(returns, window_days):
 def volume_price_confirmation(df, lookback=60):
     """
     Volume-Price Confirmation Test (5th predictability test)
-    
-    Measures: Does volume increase on moves in the trend direction?
-    
-    Method:
-    - Split last `lookback` days into up-days and down-days
-    - Compare average volume on up-days vs down-days
-    - For uptrends: up-day volume should be higher (buyers are aggressive)
-    - For downtrends: down-day volume should be higher (sellers are aggressive)
-    
-    Returns: {
-        'vp_ratio': float,       # up_vol / down_vol (>1 = bullish confirmation)
-        'vp_confirming': bool,   # Does volume confirm trend direction?
-        'avg_vol_up': float,     # Average volume on up days
-        'avg_vol_down': float,   # Average volume on down days
-        'trend_for_vp': str      # Which trend was tested
-    }
     """
     try:
         recent = df.tail(lookback).copy()
@@ -329,15 +302,12 @@ def volume_price_confirmation(df, lookback=60):
         
         if trend_3m > 0.03:
             trend_for_vp = 'UP'
-            # Uptrend confirmed: up-day volume > down-day volume by at least 10%
             vp_confirming = vp_ratio > 1.10
         elif trend_3m < -0.03:
             trend_for_vp = 'DOWN'
-            # Downtrend confirmed: down-day volume > up-day volume by at least 10%
             vp_confirming = vp_ratio < 0.90
         else:
             trend_for_vp = 'NEUTRAL'
-            # No clear trend — volume confirmation is ambiguous
             vp_confirming = False
         
         return {
@@ -355,27 +325,17 @@ def calculate_trade_quality(res):
     """
     Trade Quality Score (0-10) — How good is the current setup?
     
-    This is SEPARATE from predictability. Predictability asks "does this stock 
-    have exploitable patterns?" Quality asks "given it does, is NOW a good time?"
-    
     Components (each 0-2 points):
-    1. Multi-timeframe trend alignment (1M, 3M, 6M, 1Y agree?)
-    2. Entry timing via Z-EMA (sweet spot vs overbought/oversold?)
+    1. Multi-timeframe trend alignment
+    2. Entry timing via Z-EMA
     3. Risk-adjusted returns (Sharpe quality)
-    4. Volatility appropriateness (moderate = best for trading)
-    5. Volume-price confirmation (volume supports the trend?)
-    
-    Returns: {
-        'trade_quality': float (0-10),
-        'quality_components': dict of component scores,
-        'quality_label': str ('Excellent'/'Good'/'Fair'/'Poor')
-    }
+    4. Volatility appropriateness
+    5. Volume-price confirmation
     """
     components = {}
     total = 0.0
     
     # ── 1. MULTI-TIMEFRAME ALIGNMENT (0-2) ──────────────────────────────
-    # Do 1M, 3M, 6M, 1Y returns all point the same direction?
     returns = []
     for key in ['recent_return_1m', 'recent_return_3m', 'recent_return_6m', 'recent_return_1y']:
         val = res.get(key)
@@ -390,22 +350,19 @@ def calculate_trade_quality(res):
         alignment = max(positive, negative) / total_periods
         
         if alignment >= 1.0:
-            components['trend_alignment'] = 2.0  # All agree
+            components['trend_alignment'] = 2.0
         elif alignment >= 0.75:
-            components['trend_alignment'] = 1.5  # 3/4 agree
+            components['trend_alignment'] = 1.5
         elif alignment >= 0.5:
-            components['trend_alignment'] = 0.8  # Mixed
+            components['trend_alignment'] = 0.8
         else:
-            components['trend_alignment'] = 0.3  # Conflicting
+            components['trend_alignment'] = 0.3
     else:
-        components['trend_alignment'] = 0.5  # Insufficient data
+        components['trend_alignment'] = 0.5
     
     total += components['trend_alignment']
     
     # ── 2. ENTRY TIMING VIA Z-EMA (0-2) ─────────────────────────────────
-    # In an uptrend: Z-EMA between -0.5 and 0.5 is ideal
-    # In a downtrend: Z-EMA between -0.5 and 0.5 is ideal for shorting
-    # Extremes (>1.5 or <-1.5) = bad entry timing
     z_ema = res.get('z_ema')
     trend = res.get('trend_direction')
     
@@ -414,28 +371,27 @@ def calculate_trade_quality(res):
         
         if trend == 'UP':
             if z_ema < -0.5:
-                components['entry_timing'] = 2.0   # Pullback in uptrend = great entry
+                components['entry_timing'] = 2.0
             elif z_ema < 0.5:
-                components['entry_timing'] = 1.5   # Normal zone
+                components['entry_timing'] = 1.5
             elif z_ema < 1.0:
-                components['entry_timing'] = 1.0   # Slightly extended
+                components['entry_timing'] = 1.0
             elif z_ema < 1.5:
-                components['entry_timing'] = 0.5   # Overbought
+                components['entry_timing'] = 0.5
             else:
-                components['entry_timing'] = 0.0   # Very overbought
+                components['entry_timing'] = 0.0
         elif trend == 'DOWN':
             if z_ema > 0.5:
-                components['entry_timing'] = 2.0   # Bounce in downtrend = great short entry
+                components['entry_timing'] = 2.0
             elif z_ema > -0.5:
-                components['entry_timing'] = 1.5   # Normal zone
+                components['entry_timing'] = 1.5
             elif z_ema > -1.0:
-                components['entry_timing'] = 1.0   # Slightly extended
+                components['entry_timing'] = 1.0
             elif z_ema > -1.5:
-                components['entry_timing'] = 0.5   # Oversold
+                components['entry_timing'] = 0.5
             else:
-                components['entry_timing'] = 0.0   # Very oversold
+                components['entry_timing'] = 0.0
         else:
-            # Neutral trend — middle Z-EMA is fine, extremes are risky
             if abs_z < 0.5:
                 components['entry_timing'] = 1.5
             elif abs_z < 1.0:
@@ -469,19 +425,17 @@ def calculate_trade_quality(res):
     total += components['sharpe_quality']
     
     # ── 4. VOLATILITY APPROPRIATENESS (0-2) ──────────────────────────────
-    # Moderate volatility (20-40%) is ideal: enough movement to profit,
-    # not so much that stops get blown out
     vol = res.get('volatility')
     
     if vol is not None:
         if 20 <= vol <= 35:
-            components['volatility_fit'] = 2.0    # Sweet spot
+            components['volatility_fit'] = 2.0
         elif 15 <= vol <= 45:
-            components['volatility_fit'] = 1.5    # Acceptable
+            components['volatility_fit'] = 1.5
         elif 10 <= vol <= 55:
-            components['volatility_fit'] = 0.8    # Marginal
+            components['volatility_fit'] = 0.8
         else:
-            components['volatility_fit'] = 0.3    # Too calm or too wild
+            components['volatility_fit'] = 0.3
     else:
         components['volatility_fit'] = 0.5
     
@@ -492,10 +446,8 @@ def calculate_trade_quality(res):
     
     if vp is not None and vp.get('vp_confirming') is not None:
         if vp['vp_confirming']:
-            # Volume confirms trend
             ratio = vp['vp_ratio']
             if vp['trend_for_vp'] == 'UP':
-                # How strongly does volume confirm uptrend?
                 if ratio > 1.3:
                     components['volume_confirmation'] = 2.0
                 elif ratio > 1.15:
@@ -503,7 +455,6 @@ def calculate_trade_quality(res):
                 else:
                     components['volume_confirmation'] = 1.0
             elif vp['trend_for_vp'] == 'DOWN':
-                # How strongly does volume confirm downtrend?
                 if ratio < 0.7:
                     components['volume_confirmation'] = 2.0
                 elif ratio < 0.85:
@@ -513,10 +464,9 @@ def calculate_trade_quality(res):
             else:
                 components['volume_confirmation'] = 0.5
         else:
-            # Volume does NOT confirm trend — warning sign
             components['volume_confirmation'] = 0.2
     else:
-        components['volume_confirmation'] = 0.5  # No data
+        components['volume_confirmation'] = 0.5
     
     total += components['volume_confirmation']
     
@@ -542,12 +492,6 @@ def calculate_trade_quality(res):
 def calculate_amihud_illiquidity(df):
     """
     Calculate Amihud Illiquidity ratio: |Return| / (Volume * Price)
-    Higher value = more illiquid (price moves more per dollar of volume)
-    
-    Interpretation:
-    - < 0.001: Highly liquid (large-cap stocks)
-    - 0.001 - 0.01: Moderately liquid
-    - > 0.01: Illiquid (hard to trade large positions)
     """
     try:
         df_temp = df.copy()
@@ -555,7 +499,6 @@ def calculate_amihud_illiquidity(df):
         df_temp['volume_times_price'] = df_temp['Volume'] * df_temp['Close']
         df_temp['illiquidity'] = df_temp['abs_return'] / (df_temp['volume_times_price'] + 1e-10)
         
-        # Use last 30 days for recent liquidity assessment
         amihud = df_temp['illiquidity'].tail(30).mean()
         return float(amihud)
     except Exception:
@@ -565,58 +508,50 @@ def calculate_amihud_illiquidity(df):
 def calculate_dynamic_slippage(df):
     """
     Estimate slippage based on volatility and daily price range.
-    Higher volatility = wider spreads = more slippage
-    
-    Approach: Use 5% of average daily range as conservative estimate
     """
     try:
         df_temp = df.copy()
-        # Daily range as % of close
         df_temp['daily_range_pct'] = (df_temp['High'] - df_temp['Low']) / df_temp['Close']
         avg_daily_range = df_temp['daily_range_pct'].tail(30).mean()
         
-        # Assume you lose 5% of daily range to slippage (conservative)
         estimated_slippage = avg_daily_range * 0.05
         return float(estimated_slippage)
     except Exception:
-        return 0.0005  # Fall back to default
+        return 0.0005
 
 
 def get_liquidity_score(amihud_illiquidity, position_size_vs_volume):
     """
     Determine liquidity quality based on Amihud ratio and position size
-    
-    Returns: 'HIGH', 'MEDIUM', 'LOW'
     """
     if amihud_illiquidity is None or position_size_vs_volume is None:
         return 'UNKNOWN'
     
-    # HIGH liquidity: Amihud < 0.001 AND position < 0.5% of volume
     if amihud_illiquidity < 0.001 and position_size_vs_volume < 0.005:
         return 'HIGH'
     
-    # MEDIUM liquidity: Amihud < 0.01 AND position < 2% of volume
     if amihud_illiquidity < 0.01 and position_size_vs_volume < 0.02:
         return 'MEDIUM'
     
-    # LOW liquidity: Everything else
     return 'LOW'
 
 
 def get_liquidity_warning(liquidity_score, position_size_vs_volume, amihud_illiquidity):
     """
-    Generate warning message if liquidity is concerning
-    Only warn for CRITICAL liquidity issues, not edge-vs-friction issues
+    Generate warning message if liquidity is concerning.
+    These are ADVISORY warnings — they do NOT block trading signals.
     """
     warnings = []
     
-    if position_size_vs_volume > 0.05:
-        warnings.append("CRITICAL: Position exceeds 5% of daily volume - may not be executable")
+    if position_size_vs_volume > 0.10:
+        warnings.append(f"Position is {position_size_vs_volume*100:.1f}% of daily volume — expect significant market impact and slippage")
+    elif position_size_vs_volume > 0.05:
+        warnings.append(f"Position is {position_size_vs_volume*100:.2f}% of daily volume — may cause noticeable slippage")
     elif position_size_vs_volume > 0.02:
-        warnings.append(f"Position is {position_size_vs_volume*100:.2f}% of daily volume - expect heavy slippage")
+        warnings.append(f"Position is {position_size_vs_volume*100:.2f}% of daily volume — minor slippage possible")
     
     if amihud_illiquidity and amihud_illiquidity > 0.01:
-        warnings.append("Stock is illiquid - high price impact on large orders")
+        warnings.append("Stock is illiquid — high price impact on large orders")
     
     return ' | '.join(warnings) if warnings else None
 
@@ -647,24 +582,13 @@ def analyze_stock(ticker, period="5y", window_days=5, account_size=10000, risk_p
     current = yfticker.info.get('currentPrice')
     cap = format_number(yfticker.info.get('marketCap'))
     if current is None or current == 0:
-        current = round(float(df['Close'].iloc[-1]),2)  # Use last closing price as fallback
+        current = round(float(df['Close'].iloc[-1]),2)
     
-    # CRITICAL VALIDATION: Account must be able to afford 1 share + risk buffer
-    if current and account_size < current * (1 + risk_per_trade):
-        min_account_needed = current * (1 + risk_per_trade)
-        return {
-            "error": (
-                f"Account size (${account_size:,.2f}) is too small for this stock (${current:,.2f}/share). "
-                f"Minimum needed: ${min_account_needed:,.2f} "
-                f"(1 share + {risk_per_trade*100:.1f}% risk tolerance). "
-                f"You need ${min_account_needed - account_size:,.2f} more."
-            ),
-            "ticker": ticker,
-            "current": current,
-            "cap": cap,
-            "min_account_needed": min_account_needed,
-            "risk_per_trade": risk_per_trade
-        }
+    # ═══════════════════════════════════════════════════════════════════════
+    # FIX #1: REMOVED the early return that blocked the entire results page
+    # when account_size < share price. Now we always run the full analysis
+    # and handle affordability in the position sizing section instead.
+    # ═══════════════════════════════════════════════════════════════════════
     
     OHLC = df.reset_index()[['Date','Open', 'High', 'Close', 'Low']]
     OHLC['Date'] = pd.to_datetime(OHLC['Date']).dt.strftime('%Y-%m-%d')
@@ -725,8 +649,8 @@ def analyze_stock(ticker, period="5y", window_days=5, account_size=10000, risk_p
         'total_friction_pct': None,
         'expected_edge_pct': None,
         'is_liquid_enough': None,
-        'liquidity_failed': False,  # True = position too large for market, False = pattern issue
-        'calculated_shares': None,  # Shares before affordability check (for liquidity analysis)
+        'liquidity_failed': False,
+        'calculated_shares': None,
         'liquidity_warning': None,
         'title': title,
         'current': current,
@@ -736,8 +660,8 @@ def analyze_stock(ticker, period="5y", window_days=5, account_size=10000, risk_p
         'data_points': len(df),
         'transaction_cost': 0.001,  # 0.1% per trade
         'slippage': 0.0005,  # 0.05%
-        'risk_per_trade': risk_per_trade,  # Store user's risk tolerance
-        'account_size_input': account_size,  # Store for speculative position halving
+        'risk_per_trade': risk_per_trade,
+        'account_size_input': account_size,
     }
 
     # Split data: 70% train, 30% test for out-of-sample validation
@@ -748,34 +672,30 @@ def analyze_stock(ticker, period="5y", window_days=5, account_size=10000, risk_p
     returns_train = df_train['Return'].dropna().values
     returns_test = df_test['Return'].dropna().values
 
-    # CALCULATE RECENT RETURNS (for determining trend direction)
+    # CALCULATE RECENT RETURNS
     current = df['Close'].iloc[-1]
     
-    # 1 year ago (252 trading days)
     if len(df) >= 252:
         price_1y_ago = df['Close'].iloc[-252]
         recent_return_1y = (current - price_1y_ago) / price_1y_ago
         res['recent_return_1y'] = float(recent_return_1y)
     
-    # 6 months ago (126 trading days)
     if len(df) >= 126:
         price_6m_ago = df['Close'].iloc[-126]
         recent_return_6m = (current - price_6m_ago) / price_6m_ago
         res['recent_return_6m'] = float(recent_return_6m)
     
-    # 3 months ago (63 trading days)
     if len(df) >= 63:
         price_3m_ago = df['Close'].iloc[-63]
         recent_return_3m = (current - price_3m_ago) / price_3m_ago
         res['recent_return_3m'] = float(recent_return_3m)
     
-    # 1 month ago (21 trading days)
     if len(df) >= 21:
         price_1m_ago = df['Close'].iloc[-21]
         recent_return_1m = (current - price_1m_ago) / price_1m_ago
         res['recent_return_1m'] = float(recent_return_1m)
     
-    # Determine trend direction based on recent performance
+    # Determine trend direction
     if res['recent_return_1y'] is not None:
         if res['recent_return_1y'] > 0.05:
             res['trend_direction'] = 'UP'
@@ -802,7 +722,7 @@ def analyze_stock(ticker, period="5y", window_days=5, account_size=10000, risk_p
             z_ema = (df['Close'].iloc[-1] - ema_m.iloc[-1]) / ema_std
             res['z_ema'] = float(z_ema)
 
-    # Risk & Performance Metrics and Sharpe index
+    # Risk & Performance Metrics
     if len(returns) > 2:
         std_dev = returns.std()
         avg_ret = returns.mean()
@@ -825,125 +745,93 @@ def analyze_stock(ticker, period="5y", window_days=5, account_size=10000, risk_p
         else:
             res['volatility_category'] = 'VERY_HIGH'
 
-    # POSITION SIZING
-    if res['volatility'] is not None and current and current > 0:
-        # Daily volatility = Annual / sqrt(252)
-        daily_vol_pct = (res['volatility'] / 100) / np.sqrt(252)
+    # ═══════════════════════════════════════════════════════════════════════
+    # POSITION SIZING — New model: Trade Size + Risk Tolerance
+    #
+    # Parameters (renamed for clarity):
+    #   account_size  → "Trade Size": capital allocated to THIS trade
+    #   risk_per_trade → "Risk Tolerance": % drawdown that triggers stop loss
+    #
+    # How it works:
+    #   Shares = trade_size / share_price  (you spend what you allocated)
+    #   Stop loss (long)  = entry * (1 - risk_tolerance)
+    #   Stop loss (short) = entry * (1 + risk_tolerance)
+    #   Risk amount = trade_size * risk_tolerance
+    #
+    # At 100% risk: no stop loss for longs (accept total loss)
+    # At 2% risk: tight stop, small position risk
+    # ═══════════════════════════════════════════════════════════════════════
+    if current and current > 0:
+        trade_size = account_size  # Renamed for clarity in this block
         
-        # Stop loss distance = current price * (2x daily volatility)
-        stop_loss_dist = current * (daily_vol_pct * 2)
+        # How many whole shares can we buy with our trade size?
+        exact_shares = trade_size / current
+        whole_shares = int(exact_shares)
         
-        if stop_loss_dist > 0:
-            # Position size = $ Risk / $ Distance
-            risk_amount = account_size * risk_per_trade
-            shares_to_buy = risk_amount / stop_loss_dist
+        # Store for liquidity analysis
+        res['calculated_shares'] = exact_shares
+        
+        if whole_shares >= 1:
+            res['suggested_shares'] = whole_shares
             
-            # Store calculated shares for liquidity analysis (before rounding/affordability)
-            res['calculated_shares'] = shares_to_buy
+            position_value = whole_shares * current
             
-            # Whole shares only (realistic trading)
-            whole_shares = int(shares_to_buy)
+            # Stop loss based on risk tolerance (user-specified %)
+            stop_loss_dist = current * risk_per_trade
             
-            if whole_shares >= 1:
-                # Check if user can actually afford this position
-                position_value = whole_shares * current
-                
-                if position_value <= account_size:
-                    # User can afford this position
-                    res['suggested_shares'] = whole_shares
-                    
-                    # CRITICAL FIX: Store both long and short stop loss prices
-                    res['stop_loss_price_long'] = float(current - stop_loss_dist)
-                    res['stop_loss_price_short'] = float(current + stop_loss_dist)
-                    
-                    # Default to long for now (will be updated after signal generation)
-                    res['stop_loss_price'] = float(current - stop_loss_dist)
-                    
-                    res['position_risk_amount'] = float(risk_amount)
-                    
-                    # Calculate position metrics
-                    position_pct = (position_value / account_size) * 100
-                    
-                    # Add educational notes
-                    if position_pct > 50:
-                        res['position_size_note'] = (
-                            f"Position is {position_pct:.1f}% of account. "
-                            f"High concentration risk - consider diversification (most traders use 20-30% max per position)."
-                        )
-                    elif position_pct > 30:
-                        res['position_size_note'] = (
-                            f"Position is {position_pct:.1f}% of account. "
-                            f"Moderate concentration - acceptable for high-conviction trades."
-                        )
-                    
-                    # If fractional shares were rounded down significantly
-                    if shares_to_buy >= 1.5 and whole_shares < shares_to_buy:
-                        rounded_down = shares_to_buy - whole_shares
-                        res['position_size_note'] = (
-                            f"{res.get('position_size_note', '')} "
-                            f"Note: Calculated {shares_to_buy:.2f} shares, rounded down to {whole_shares} (lost {rounded_down:.2f} shares)."
-                        ).strip()
-                else:
-                    # Position value exceeds account - can't afford it
-                    res['suggested_shares'] = None
-                    res['stop_loss_price'] = None
-                    res['stop_loss_price_long'] = None
-                    res['stop_loss_price_short'] = None
-                    res['position_risk_amount'] = None
-                    
-                    # Calculate how many shares they can actually afford
-                    affordable_shares = int(account_size / current)
-                    
-                    # Calculate what account size they'd need for this risk level
-                    min_account_for_risk = position_value
-                    
-                    if affordable_shares >= 1:
-                        res['position_size_note'] = (
-                            f"Position value (${position_value:,.0f}) exceeds account size (${account_size:,.0f}). "
-                            f"With {risk_per_trade*100:.1f}% risk tolerance, you need ${shares_to_buy:.2f} shares "
-                            f"but can only afford {affordable_shares} share{'s' if affordable_shares > 1 else ''}. "
-                            f"Options: (1) Increase account to ${min_account_for_risk:,.0f}, "
-                            f"(2) Reduce risk to {(affordable_shares * stop_loss_dist / account_size)*100:.1f}%, "
-                            f"or (3) Trade a cheaper stock."
-                        )
-                    else:
-                        res['position_size_note'] = (
-                            f"Position value (${position_value:,.0f}) exceeds account size (${account_size:,.0f}). "
-                            f"Cannot afford even 1 share (${current:,.2f}). "
-                            f"Need minimum ${current * (1 + risk_per_trade):,.0f} account to trade this stock "
-                            f"with {risk_per_trade*100:.1f}% risk."
-                        )
-            else:
-                # Fractional shares - can't execute
-                res['suggested_shares'] = None
-                res['stop_loss_price'] = None
+            if risk_per_trade >= 1.0:
+                # 100% risk = no stop loss for longs (accept total loss)
                 res['stop_loss_price_long'] = None
                 res['stop_loss_price_short'] = None
-                res['position_risk_amount'] = None
-                
-                # Calculate minimum account needed for 1 share
-                min_account_for_one_share = stop_loss_dist / risk_per_trade
-                
-                res['position_size_note'] = (
-                    f"Calculated {shares_to_buy:.4f} shares (fractional). "
-                    f"Need minimum 1 whole share to trade. "
-                    f"Minimum account size: ${min_account_for_one_share:,.0f} "
-                    f"(with {risk_per_trade*100:.1f}% risk tolerance)."
+                res['stop_loss_price'] = None
+            else:
+                res['stop_loss_price_long'] = float(current - stop_loss_dist)
+                res['stop_loss_price_short'] = float(current + stop_loss_dist)
+                res['stop_loss_price'] = float(current - stop_loss_dist)  # Default to long
+            
+            # Risk amount = what you lose if stop is hit
+            risk_amount = position_value * risk_per_trade
+            res['position_risk_amount'] = float(risk_amount)
+            
+            notes = []
+            
+            # Note about rounding down
+            leftover = trade_size - position_value
+            if leftover > 0 and exact_shares >= 1.5:
+                notes.append(
+                    f"Buying {whole_shares} shares at ${current:,.2f} = ${position_value:,.2f} "
+                    f"(${leftover:,.2f} unused from ${trade_size:,.2f} trade size)."
                 )
+            
+            if risk_per_trade >= 1.0:
+                notes.append(
+                    f"No stop loss — 100% risk tolerance means you accept total loss of ${position_value:,.2f}."
+                )
+            elif risk_per_trade >= 0.5:
+                notes.append(
+                    f"Wide stop loss at {risk_per_trade*100:.1f}% — "
+                    f"you'd lose ${risk_amount:,.2f} if stop is hit."
+                )
+            
+            if notes:
+                res['position_size_note'] = ' '.join(notes)
+                
+        else:
+            # Can't afford even 1 share
+            res['suggested_shares'] = None
+            res['stop_loss_price'] = None
+            res['stop_loss_price_long'] = None
+            res['stop_loss_price_short'] = None
+            res['position_risk_amount'] = None
+            
+            res['position_size_note'] = (
+                f"Cannot afford 1 share at ${current:,.2f} with ${trade_size:,.2f} trade size. "
+                f"Minimum trade size: ${current:,.2f}. "
+                f"The full analysis is shown below."
+            )
 
     # ═══════════════════════════════════════════════════════════════════════
     # PREDICTABILITY SCORE (5 tests, each worth 1 point)
-    #
-    # 1. Momentum correlation (3-day blocks, |r| > 0.08)
-    # 2. Hurst/DFA (significant + regime detected)
-    # 3. Mean reversion (conditional reversal after extremes)
-    # 4. Regime stability OOS (pattern holds out-of-sample)
-    # 5. Volume-price confirmation (volume supports trend direction)
-    #
-    # Ljung-Box: still computed (informational) but NOT scored
-    #   — it's redundant with momentum correlation
-    # ADF: still computed (informational) but NOT scored
-    #   — most stocks are non-stationary, it rarely contributes
     # ═══════════════════════════════════════════════════════════════════════
 
     # Ljung-Box Test (informational only — NOT scored)
@@ -959,11 +847,7 @@ def analyze_stock(ticker, period="5y", window_days=5, account_size=10000, risk_p
         except Exception: 
             pass
 
-    # ═══════════════════════════════════════════════════════════════════════
     # HURST EXPONENT (DFA with shuffled baseline)
-    # Uses Detrended Fluctuation Analysis instead of R/S for stability.
-    # Compares against shuffled baseline to verify significance.
-    # ═══════════════════════════════════════════════════════════════════════
     if len(returns_train) > 100:
         try:
             H, H_shuf_mean, H_shuf_std, is_sig, _, _, _ = hurst_with_baseline(
@@ -975,13 +859,12 @@ def analyze_stock(ticker, period="5y", window_days=5, account_size=10000, risk_p
                 if not np.isnan(H_shuf_mean):
                     res['hurst_shuffled_mean'] = float(H_shuf_mean)
                 
-                # Only count toward predictability if significantly different from random
                 if is_sig and (H > 0.55 or H < 0.45):
                     res['predictability_score'] += 1
         except Exception:
             pass
     
-    # Hurst out-of-sample (use fewer shuffles — just need regime check, not full significance)
+    # Hurst out-of-sample
     oos_shuffles = max(10, n_shuffles // 3)
     if len(returns_test) > 100:
         try:
@@ -991,16 +874,7 @@ def analyze_stock(ticker, period="5y", window_days=5, account_size=10000, risk_p
         except Exception:
             pass
 
-    # ═══════════════════════════════════════════════════════════════════════
-    # MOMENTUM CORRELATION (Non-overlapping 3-day blocks)
-    # Measures: "Does the direction of this 3-day period predict the next?"
-    # 3-day blocks give ~400+ pairs from 5Y training data — enough for reliable
-    # correlation while capturing multi-day momentum (not just daily noise).
-    # No overlap = no bias correction needed.
-    #
-    # Typical 3-day block correlations: 0.05–0.15 for trending stocks
-    # Threshold: 0.08 (with ~400 pairs, t ≈ 0.08 * sqrt(400) ≈ 1.6)
-    # ═══════════════════════════════════════════════════════════════════════
+    # MOMENTUM CORRELATION
     if len(returns_train) > 30:
         m_corr, n_pairs = multi_day_momentum_corr(returns_train, block_days=3)
         if m_corr is not None:
@@ -1008,13 +882,10 @@ def analyze_stock(ticker, period="5y", window_days=5, account_size=10000, risk_p
             if abs(m_corr) > 0.08:
                 res['predictability_score'] += 1
 
-        # Mean Reversion Analysis (non-overlapping blocks — appropriate here
-        # because we're asking "after a big 5-day move, what happens next?")
         mean_rev_up, mean_rev_down = non_overlapping_mean_reversion(returns_train, window_days)
         res['mean_rev_up'] = mean_rev_up
         res['mean_rev_down'] = mean_rev_down
 
-        # Score Mean Reversion
         if res['mean_rev_up'] is not None and res['mean_rev_down'] is not None:
             if abs(res['mean_rev_up']) > 0.003 and abs(res['mean_rev_down']) > 0.003:
                 res['predictability_score'] += 1
@@ -1025,21 +896,11 @@ def analyze_stock(ticker, period="5y", window_days=5, account_size=10000, risk_p
         if m_corr_oos is not None:
             res['momentum_corr_oos'] = float(m_corr_oos)
 
-        # Mean Reversion OOS (non-overlapping blocks)
         mean_rev_up_oos, mean_rev_down_oos = non_overlapping_mean_reversion(returns_test, window_days)
         res['mean_rev_up_oos'] = mean_rev_up_oos
         res['mean_rev_down_oos'] = mean_rev_down_oos
 
     # REGIME STABILITY CHECK
-    # Asks: "Does the momentum pattern exist in BOTH periods with the SAME direction?"
-    # 
-    # Existence-based (not ratio-based):
-    # - Same sign AND OOS passes minimum threshold → STABLE (1.0)
-    # - Same sign but OOS below threshold → WEAK (0.5) 
-    # - Sign flip → UNSTABLE (0.0)
-    #
-    # With 3-day non-overlapping blocks, typical correlations are 0.05–0.15.
-    # OOS threshold: 0.05 (meaningful multi-day momentum at 3-day scale)
     MOMENTUM_MIN_THRESHOLD = 0.05
     
     if res.get('momentum_corr') is not None and res.get('momentum_corr_oos') is not None:
@@ -1050,26 +911,19 @@ def analyze_stock(ticker, period="5y", window_days=5, account_size=10000, risk_p
             same_sign = (corr_in > 0 and corr_oos > 0) or (corr_in < 0 and corr_oos < 0)
             
             if same_sign and abs(corr_oos) >= MOMENTUM_MIN_THRESHOLD:
-                # Pattern exists in both periods, same direction, both meaningful
                 res['regime_stability'] = 1.0
             elif same_sign:
-                # Same direction but OOS is weak — partial confidence
                 res['regime_stability'] = 0.5
             else:
-                # Sign flipped — pattern reversed out-of-sample
                 res['regime_stability'] = 0.0
         else:
-            # In-sample momentum too weak to assess stability
             res['regime_stability'] = 0.0
     
-    # Also check Hurst stability if available
-    # If Hurst is significant in-sample, does the regime hold OOS?
     if (res.get('hurst') is not None and res.get('hurst_oos') is not None 
         and res.get('hurst_significant')):
         hurst_in = res['hurst']
         hurst_oos = res['hurst_oos']
         
-        # Check if both agree on regime type (both trending, both mean-reverting, etc.)
         in_trending = hurst_in > 0.55
         in_reverting = hurst_in < 0.45
         oos_trending = hurst_oos > 0.55
@@ -1077,21 +931,14 @@ def analyze_stock(ticker, period="5y", window_days=5, account_size=10000, risk_p
         
         hurst_agrees = (in_trending and oos_trending) or (in_reverting and oos_reverting)
         
-        # If Hurst regime disagrees OOS, cap stability at 0.5
         if not hurst_agrees and res.get('regime_stability', 0) > 0.5:
             res['regime_stability'] = 0.5
 
-    # ═══════════════════════════════════════════════════════════════════════
     # PREDICTABILITY TEST 4: Regime Stability OOS
-    # Does the momentum pattern hold out-of-sample?
-    # ═══════════════════════════════════════════════════════════════════════
     if res.get('regime_stability') is not None and res['regime_stability'] >= 0.5:
         res['predictability_score'] += 1
 
-    # ═══════════════════════════════════════════════════════════════════════
     # PREDICTABILITY TEST 5: Volume-Price Confirmation
-    # Does volume increase on moves in the trend direction?
-    # ═══════════════════════════════════════════════════════════════════════
     vp_data = volume_price_confirmation(df, lookback=60)
     if vp_data is not None:
         res['volume_price_data'] = vp_data
@@ -1101,7 +948,23 @@ def analyze_stock(ticker, period="5y", window_days=5, account_size=10000, risk_p
         if vp_data['vp_confirming']:
             res['predictability_score'] += 1
 
-    # LIQUIDITY ANALYSIS
+    # ═══════════════════════════════════════════════════════════════════════
+    # LIQUIDITY ANALYSIS — FIX #3: Liquidity is now ADVISORY, not a gate.
+    #
+    # Old bug: position_size_vs_volume >= 2% set liquidity_failed=True,
+    # which forced generate_trading_signal() to return DO_NOT_TRADE.
+    # This was wrong because:
+    #   - The user can adjust account size/risk to fix liquidity
+    #   - A valid pattern shouldn't be hidden because of position sizing
+    #   - The 2% threshold was arbitrary for the "too large" case
+    #
+    # New logic:
+    # - Liquidity warnings are always computed and displayed
+    # - They NEVER override the trading signal
+    # - The signal reflects pattern quality only
+    # - Edge vs friction still matters (keeps the 3x friction gate)
+    # ═══════════════════════════════════════════════════════════════════════
+
     # Calculate 30-day average volume
     avg_vol_30 = df['Volume'].tail(30).mean()
     res['avg_daily_volume'] = float(avg_vol_30)
@@ -1120,51 +983,28 @@ def analyze_stock(ticker, period="5y", window_days=5, account_size=10000, risk_p
     
     # Dynamic Slippage Estimate
     dynamic_slippage = calculate_dynamic_slippage(df)
-    res['estimated_slippage_pct'] = dynamic_slippage * 100  # Convert to percentage
+    res['estimated_slippage_pct'] = dynamic_slippage * 100
     
-    # Total Friction (Slippage + Transaction Cost)
+    # Total Friction (Slippage + Transaction Cost) round trip
     total_friction = (dynamic_slippage + res['transaction_cost']) * 2
     res['total_friction_pct'] = float(total_friction * 100)
     
-    # Calculate Expected Edge (PRELIMINARY - will be zeroed if pattern fails)
+    # Calculate Expected Edge
     if res['momentum_corr'] is not None and res['volatility'] is not None:
         expected_edge = abs(res['momentum_corr']) * res['volatility']
         res['expected_edge_pct'] = float(expected_edge)
     
-    # Is it liquid enough to trade?
-    if (res['position_size_vs_volume'] is not None and 
-        res['expected_edge_pct'] is not None and
-        res['total_friction_pct'] is not None):
+    # Liquidity assessment — ADVISORY ONLY, does not block signals
+    if (res.get('expected_edge_pct') is not None and
+        res.get('total_friction_pct') is not None):
         
-        position_too_large = res['position_size_vs_volume'] >= 0.02
         edge_too_small = res['expected_edge_pct'] <= (res['total_friction_pct'] * 3)
         
-        if position_too_large:
+        if edge_too_small:
+            # Edge vs friction is still a hard gate — this is about pattern quality,
+            # not position sizing. If your edge can't cover costs, don't trade.
             res['is_liquid_enough'] = False
-            res['liquidity_failed'] = True
-            
-            vol_pct = res['position_size_vs_volume'] * 100
-            if vol_pct > 100:
-                res['liquidity_warning'] = (
-                    f"Position would be {vol_pct:.1f}% of daily volume - exceeds entire daily trading! "
-                    f"This would cause massive slippage. This tool is designed for retail/small institutional traders. "
-                    f"Large institutions need multi-day VWAP execution, dark pools, or reduce position size to <2% of daily volume."
-                )
-            elif vol_pct > 10:
-                res['liquidity_warning'] = (
-                    f"Position would be {vol_pct:.1f}% of daily volume (need <2%). "
-                    f"This would significantly move the market and cause severe slippage (est. 10-30%). "
-                    f"Options: (1) Reduce risk tolerance to get smaller position, (2) Split order over multiple days, "
-                    f"or (3) Trade a more liquid stock."
-                )
-            else:
-                res['liquidity_warning'] = (
-                    f"Position would be {vol_pct:.1f}% of daily volume (need <2%). "
-                    f"This would impact the market. Consider reducing position size or spreading execution over time."
-                )
-        elif edge_too_small:
-            res['is_liquid_enough'] = False
-            res['liquidity_failed'] = False
+            res['liquidity_failed'] = False  # Pattern issue, not liquidity
         else:
             res['is_liquid_enough'] = True
             res['liquidity_failed'] = False
@@ -1172,11 +1012,17 @@ def analyze_stock(ticker, period="5y", window_days=5, account_size=10000, risk_p
         res['is_liquid_enough'] = True
         res['liquidity_failed'] = False
     
-    # Liquidity Quality Score
+    # Liquidity Quality Score (informational)
     res['liquidity_score'] = get_liquidity_score(amihud, res['position_size_vs_volume'])
     
-    # Liquidity Warning (only for CRITICAL issues)
-    if res['liquidity_score'] == 'LOW' or res['position_size_vs_volume'] and res['position_size_vs_volume'] > 0.02:
+    # Liquidity Warning (advisory — shown to user but doesn't block signal)
+    if res['position_size_vs_volume'] and res['position_size_vs_volume'] > 0.02:
+        res['liquidity_warning'] = get_liquidity_warning(
+            res['liquidity_score'],
+            res['position_size_vs_volume'] or 0,
+            amihud
+        )
+    elif res['liquidity_score'] == 'LOW':
         res['liquidity_warning'] = get_liquidity_warning(
             res['liquidity_score'],
             res['position_size_vs_volume'] or 0,
@@ -1186,10 +1032,10 @@ def analyze_stock(ticker, period="5y", window_days=5, account_size=10000, risk_p
     # GENERATE FINAL TRADING SIGNAL
     res['final_signal'] = generate_trading_signal(res)
     
-    # ═══════════════════════════════════════════════════════════════════════
     # Update stop loss based on final signal (LONG vs SHORT)
-    # ═══════════════════════════════════════════════════════════════════════
-    if res['final_signal'] and res.get('stop_loss_price_long') and res.get('stop_loss_price_short'):
+    # Skip if risk_per_trade >= 1.0 (no stop loss)
+    if (res['final_signal'] and res.get('stop_loss_price_long') is not None 
+        and res.get('stop_loss_price_short') is not None):
         short_signals = [
             'SHORT_DOWNTREND', 'SHORT_BOUNCES_ONLY', 'SHORT_MOMENTUM',
             'SPEC_SHORT_DOWNTREND', 'SPEC_SHORT_BOUNCES_ONLY', 'SPEC_SHORT_MOMENTUM',
@@ -1201,42 +1047,33 @@ def analyze_stock(ticker, period="5y", window_days=5, account_size=10000, risk_p
         else:
             res['stop_loss_price'] = res['stop_loss_price_long']
     
-    # ═══════════════════════════════════════════════════════════════════════
-    # SPECULATIVE TIER: Halve position size for 2/4 predictability signals
-    # ═══════════════════════════════════════════════════════════════════════
+    # SPECULATIVE TIER: Halve position size for 2/5 predictability signals
     if res['final_signal'] and res['final_signal'].startswith('SPEC_'):
         if res.get('suggested_shares') is not None and res['suggested_shares'] > 1:
             full_shares = res['suggested_shares']
             half_shares = max(1, full_shares // 2)
             res['suggested_shares'] = half_shares
-            res['speculative_full_shares'] = full_shares  # Store original for display
+            res['speculative_full_shares'] = full_shares
             
-            # Update position note
-            position_value = half_shares * (res.get('current') or 0)
-            account = res.get('account_size_input', 10000)
-            position_pct = (position_value / account) * 100 if account > 0 else 0
+            # Recalculate risk amount for halved position
+            half_position_value = half_shares * (res.get('current') or 0)
+            res['position_risk_amount'] = float(half_position_value * risk_per_trade)
+            
             res['position_size_note'] = (
                 f"⚠ SPECULATIVE: Position halved from {full_shares} to {half_shares} shares "
-                f"({position_pct:.1f}% of account). Only {res.get('predictability_score', 0)}/5 statistical tests passed — "
+                f"(${half_position_value:,.2f}). Only {res.get('predictability_score', 0)}/5 statistical tests passed — "
                 f"reduced position size limits downside from weaker conviction."
             )
     
-    # ═══════════════════════════════════════════════════════════════════════
-    # TRADE QUALITY SCORE (0-10)
-    # Synthesizes descriptive stats into a single "how good is this setup?"
-    # Only meaningful for tradeable signals — skip for DO_NOT_TRADE
-    # ═══════════════════════════════════════════════════════════════════════
+    # TRADE QUALITY SCORE
     if res['final_signal'] and res['final_signal'] not in ('DO_NOT_TRADE', 'NO_CLEAR_SIGNAL'):
         quality = calculate_trade_quality(res)
         res['trade_quality'] = quality['trade_quality']
         res['quality_components'] = quality['quality_components']
         res['quality_label'] = quality['quality_label']
     
-    # ═══════════════════════════════════════════════════════════════════════
     # Zero out edge if pattern failed statistical validation
-    # BUT NOT if liquidity failed (position too large) - that's a different issue
-    # ═══════════════════════════════════════════════════════════════════════
-    if res['final_signal'] in ['DO_NOT_TRADE', 'NO_CLEAR_SIGNAL'] and not res.get('liquidity_failed', False):
+    if res['final_signal'] in ['DO_NOT_TRADE', 'NO_CLEAR_SIGNAL']:
         res['expected_edge_pct'] = 0.0
         
         validation_failures = []
@@ -1267,9 +1104,8 @@ def analyze_stock(ticker, period="5y", window_days=5, account_size=10000, risk_p
             failure_msg = "; ".join(validation_failures)
             pattern_warning = f"Pattern failed statistical validation: {failure_msg}. No exploitable edge exists."
         else:
-            pattern_warning = "Pattern failed statistical validation - no exploitable edge exists"
+            pattern_warning = "Pattern failed statistical validation — no exploitable edge exists"
 
-         # Append to existing liquidity warning instead of overwriting
         existing_warning = res.get('liquidity_warning')
         if existing_warning:
             res['liquidity_warning'] = f"{existing_warning} | {pattern_warning}"
@@ -1283,19 +1119,21 @@ def generate_trading_signal(res):
     """
     Generate final trading signal based on all metrics.
     
-    PREDICTABILITY SCORE: Now 0-5 (was 0-4):
+    PREDICTABILITY SCORE: 0-5:
       1. Momentum correlation  2. Hurst/DFA  3. Mean reversion
       4. Regime stability OOS  5. Volume-price confirmation
     
     TWO TIERS:
-    - HIGH CONVICTION (predictability ≥3/5): Full position, standard signals
-    - SPECULATIVE (predictability 2/5): Reduced position, extra warnings
-      Still requires: stability ≥50%, edge > 3x friction, momentum > 0.08
+    - HIGH CONVICTION (predictability ≥3/5): Full position
+    - SPECULATIVE (predictability 2/5): Reduced position
     
-    Hard rejections (any predictability):
+    Hard rejections:
     - Regime stability 0% (sign flip) → DO_NOT_TRADE
-    - Not liquid enough → DO_NOT_TRADE
+    - Edge < 3x friction → DO_NOT_TRADE
     - Predictability < 2 → DO_NOT_TRADE
+    
+    NOTE: Liquidity (position size vs volume) is ADVISORY only.
+    It does NOT block the signal. The user can adjust account/risk.
     """
     
     # HARD GATE: Minimum predictability
@@ -1307,12 +1145,12 @@ def generate_trading_signal(res):
     if res.get('regime_stability') is not None and res.get('regime_stability') < 0.5:
         return 'DO_NOT_TRADE'
     
-    # HARD GATE: Liquidity & Edge
+    # HARD GATE: Edge vs Friction (pattern quality, not position sizing)
     if not res.get('is_liquid_enough', False):
         return 'DO_NOT_TRADE'
     
     # Determine tier
-    is_speculative = pred_score < 3  # 2/4 = speculative
+    is_speculative = pred_score < 3
     
     # Momentum check
     momentum = res.get('momentum_corr')
@@ -1327,7 +1165,6 @@ def generate_trading_signal(res):
         else:
             return 'DO_NOT_TRADE'
     
-    # Reference fields for entry refinement
     hurst = res.get('hurst')
     z_ema = res.get('z_ema')
     hurst_significant = res.get('hurst_significant', False)
@@ -1376,8 +1213,6 @@ def generate_trading_signal(res):
             signal = 'DO_NOT_TRADE'
     
     # ─── APPLY SPECULATIVE PREFIX ───────────────────────────────────────
-    # For 2/4 predictability: prefix actionable signals with SPEC_
-    # WAIT/DO_NOT_TRADE signals don't need speculative prefix
     if is_speculative and signal is not None:
         actionable_signals = [
             'BUY_UPTREND', 'BUY_PULLBACK', 'BUY_MOMENTUM',

@@ -5,10 +5,10 @@ import '../styles/TradingVerdict.css'
 interface TradingVerdictProps {
   results: AnalysisResult
   transactionCost: number
-  accountSize: number
+  tradeSize: number
 }
 
-export function TradingVerdict({ results, transactionCost, accountSize }: TradingVerdictProps) {
+export function TradingVerdict({ results, transactionCost, tradeSize }: TradingVerdictProps) {
   if (!results.final_signal) return null
 
   // Recalculate friction with user's transaction cost
@@ -20,6 +20,14 @@ export function TradingVerdict({ results, transactionCost, accountSize }: Tradin
   const expectedEdge = results.expected_edge_pct || 0
   const edgeRatio = totalFrictionPct > 0 ? expectedEdge / totalFrictionPct : 0
   const edgeCoversCosts = edgeRatio > 3
+
+  // Compute actual risk % from position_risk_amount / tradeSize
+  const actualRiskPct = (results.position_risk_amount && tradeSize > 0)
+    ? (results.position_risk_amount / tradeSize) * 100
+    : null
+
+  // Is this a "no stop loss" scenario (100% risk)?
+  const noStopLoss = results.risk_per_trade >= 1.0
 
   // Signal configurations
   const signalConfig: Record<string, {
@@ -134,7 +142,7 @@ export function TradingVerdict({ results, transactionCost, accountSize }: Tradin
       confidence: 'HIGH',
       summary: 'Pattern is unreliable or unstable - avoid trading'
     },
-    // ── SPECULATIVE TIER (2/5 predictability) ──────────────────────────
+    // ── SPECULATIVE TIER ──────────────────────────────────────────────
     'SPEC_BUY_UPTREND': {
       verdict: 'SPECULATIVE',
       action: '⚠ SPECULATIVE BUY - Uptrend',
@@ -210,7 +218,7 @@ export function TradingVerdict({ results, transactionCost, accountSize }: Tradin
     summary: 'Unknown signal'
   }
 
-  // Determine why it failed (thresholds match daily return scale)
+  // Determine why it failed
   const failureReasons = []
   if (results.predictability_score < 2) {
     failureReasons.push({
@@ -261,27 +269,22 @@ export function TradingVerdict({ results, transactionCost, accountSize }: Tradin
     if (results.predictability_score < 3) {
       const passed: string[] = []
       const failed: string[] = []
-      // Test 1: Momentum
       if (results.momentum_corr !== null) {
         if (Math.abs(results.momentum_corr) > 0.08) passed.push('Momentum')
         else failed.push('Momentum')
       }
-      // Test 2: Hurst/DFA
       if (results.hurst_significant !== null) {
         if (results.hurst_significant) passed.push('Hurst/DFA')
         else failed.push('Hurst/DFA')
       }
-      // Test 3: Mean Reversion
       if (results.mean_rev_up !== null && results.mean_rev_down !== null) {
         if (Math.abs(results.mean_rev_up) > 0.003 && Math.abs(results.mean_rev_down) > 0.003) passed.push('Mean Reversion')
         else failed.push('Mean Reversion')
       }
-      // Test 4: Regime Stability
       if (results.regime_stability !== null) {
         if (results.regime_stability >= 0.5) passed.push('Regime Stability')
         else failed.push('Regime Stability')
       }
-      // Test 5: Volume-Price
       if (results.vp_confirming !== null) {
         if (results.vp_confirming) passed.push('Volume-Price')
         else failed.push('Volume-Price')
@@ -367,7 +370,7 @@ export function TradingVerdict({ results, transactionCost, accountSize }: Tradin
           </div>
         )}
 
-        {/* Trade Quality Score — show for all tradeable signals */}
+        {/* Trade Quality Score */}
         {!hasFailed && results.trade_quality !== null && (
           <div style={{
             marginTop: '1em',
@@ -404,26 +407,26 @@ export function TradingVerdict({ results, transactionCost, accountSize }: Tradin
             {results.quality_components && (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5em 1.5em', fontSize: '0.8em', color: '#999' }}>
                 <span>Trend Align: <strong style={{ color: '#ccc' }}>{results.quality_components.trend_alignment.toFixed(1)}/2</strong>
-                  <Tooltip content={<><strong>Trend Alignment (0–2)</strong><p>Measures how well momentum direction matches the current trend. Full marks when momentum and trend agree (e.g., positive momentum in an uptrend). Reduced score when momentum is weak or conflicts with the trend direction.</p><p><strong>2.0:</strong> Strong agreement | <strong>1.5:</strong> Moderate | <strong>1.0:</strong> Weak | <strong>0.0:</strong> Conflicting</p></>} />
+                  <Tooltip content={<><strong>Trend Alignment (0–2)</strong><p>Measures how well momentum direction matches the current trend.</p><p><strong>2.0:</strong> Strong agreement | <strong>1.5:</strong> Moderate | <strong>1.0:</strong> Weak | <strong>0.0:</strong> Conflicting</p></>} />
                 </span>
                 <span>Entry Timing: <strong style={{ color: '#ccc' }}>{results.quality_components.entry_timing.toFixed(1)}/2</strong>
-                  <Tooltip content={<><strong>Entry Timing / Z-EMA (0–2)</strong><p>Uses the Z-score of price relative to its exponential moving average to evaluate entry timing. Ideal entries are near or below the EMA (pullbacks in uptrends, bounces in downtrends).</p><p><strong>2.0:</strong> Z-EMA in sweet spot (−0.5 to 0.5) | <strong>1.5:</strong> Moderate (0.5–1.0) | <strong>0.5:</strong> Overbought/oversold (&gt;1.5)</p></>} />
+                  <Tooltip content={<><strong>Entry Timing / Z-EMA (0–2)</strong><p>Evaluates entry timing using Z-score relative to exponential moving average.</p><p><strong>2.0:</strong> Sweet spot | <strong>1.5:</strong> Moderate | <strong>0.5:</strong> Overbought/oversold</p></>} />
                 </span>
                 <span>Sharpe: <strong style={{ color: '#ccc' }}>{results.quality_components.sharpe_quality.toFixed(1)}/2</strong>
-                  <Tooltip content={<><strong>Sharpe Quality (0–2)</strong><p>Evaluates the risk-adjusted return using the Sharpe ratio (annualized return ÷ annualized volatility). Higher Sharpe means better return per unit of risk.</p><p><strong>2.0:</strong> Sharpe ≥ 1.5 (excellent) | <strong>1.5:</strong> Sharpe ≥ 1.0 | <strong>1.0:</strong> Sharpe ≥ 0.5 | <strong>0.5:</strong> Sharpe &gt; 0</p></>} />
+                  <Tooltip content={<><strong>Sharpe Quality (0–2)</strong><p>Risk-adjusted return quality.</p><p><strong>2.0:</strong> Sharpe ≥ 1.5 | <strong>1.0:</strong> Sharpe ≥ 0.5 | <strong>0.5:</strong> Sharpe &gt; 0</p></>} />
                 </span>
                 <span>Vol Fit: <strong style={{ color: '#ccc' }}>{results.quality_components.volatility_fit.toFixed(1)}/2</strong>
-                  <Tooltip content={<><strong>Volatility Fit (0–2)</strong><p>Scores whether the stock's annualized volatility falls in the ideal trading range. Too low = not enough movement to profit after costs. Too high = stop losses get blown easily.</p><p><strong>2.0:</strong> 20–35% (sweet spot) | <strong>1.5:</strong> 15–45% | <strong>0.8:</strong> 10–55% | <strong>0.3:</strong> Outside range</p></>} />
+                  <Tooltip content={<><strong>Volatility Fit (0–2)</strong><p>Whether volatility is in the ideal trading range.</p><p><strong>2.0:</strong> 20–35% | <strong>1.5:</strong> 15–45% | <strong>0.3:</strong> Outside range</p></>} />
                 </span>
                 <span>Vol-Price: <strong style={{ color: '#ccc' }}>{results.quality_components.volume_confirmation.toFixed(1)}/2</strong>
-                  <Tooltip content={<><strong>Volume-Price Confirmation (0–2)</strong><p>Checks whether trading volume supports the trend. In an uptrend, up-day volume should exceed down-day volume by &gt;10%. In a downtrend, the reverse. Higher volume on trend-direction days shows institutional conviction.</p><p><strong>2.0:</strong> Volume confirms strongly | <strong>0.2:</strong> Volume does not confirm</p></>} />
+                  <Tooltip content={<><strong>Volume-Price Confirmation (0–2)</strong><p>Whether volume supports the trend direction.</p><p><strong>2.0:</strong> Strong confirmation | <strong>0.2:</strong> No confirmation</p></>} />
                 </span>
               </div>
             )}
           </div>
         )}
 
-        {/* Speculative tier: show what passed AND what's missing */}
+        {/* Speculative tier details */}
         {isSpeculative && (
           <div className="speculative-details" style={{ marginTop: '1em' }}>
             <div style={{ 
@@ -436,8 +439,7 @@ export function TradingVerdict({ results, transactionCost, accountSize }: Tradin
               <strong style={{ color: '#f97316' }}>⚠ Speculative Signal — Reduced Confidence</strong>
               <p style={{ color: '#d0d0d0', fontSize: '0.9em', margin: '0.5em 0 0 0', lineHeight: '1.5' }}>
                 Only {results.predictability_score}/5 statistical tests passed (high-conviction requires 3/5). 
-                The pattern direction and stability look correct, but the statistical evidence is weaker.
-                <strong> Use half your normal position size.</strong>
+                <strong> Position automatically halved.</strong>
               </p>
               {specWarnings.length > 0 && (
                 <ul style={{ margin: '0.5em 0 0 0', paddingLeft: '1.5em', fontSize: '0.85em', color: '#bbb' }}>
@@ -481,17 +483,14 @@ export function TradingVerdict({ results, transactionCost, accountSize }: Tradin
         )}
       </div>
 
-      {/* Show liquidity warning if position too large for market */}
-      {results.liquidity_failed && config.verdict !== 'DO NOT TRADE' && (
+      {/* Liquidity warning (advisory) */}
+      {results.liquidity_warning && config.verdict !== 'DO NOT TRADE' && (
         <div className="liquidity-failure-warning">
           <h4 style={{ color: '#f59e0b', margin: '0 0 0.75em 0' }}>
-            ⚠ Liquidity Constraint
+            ⚠ Liquidity Note
           </h4>
           <p style={{ color: '#d0d0d0', fontSize: '0.95em', lineHeight: '1.6', margin: '0' }}>
             {results.liquidity_warning}
-          </p>
-          <p style={{ color: '#999', fontSize: '0.85em', marginTop: '1em', fontStyle: 'italic' }}>
-            Note: The trading pattern itself is valid ({config.verdict}). The issue is your position size relative to daily trading volume.
           </p>
         </div>
       )}
@@ -511,17 +510,32 @@ export function TradingVerdict({ results, transactionCost, accountSize }: Tradin
                 </div>
                 <div className="position-item">
                   <label>Stop Loss</label>
-                  <span className="value" style={{ color: '#ef4444' }}>
-                    ${results.stop_loss_price?.toFixed(2)}
-                  </span>
-                  <small>
-                    Risk: {(Math.abs((results.current || 0) - (results.stop_loss_price || 0)) / (results.current || 1) * 100).toFixed(2)}%
-                  </small>
+                  {noStopLoss ? (
+                    <>
+                      <span className="value" style={{ color: '#f59e0b' }}>None</span>
+                      <small>100% risk tolerance — no stop loss</small>
+                    </>
+                  ) : (
+                    <>
+                      <span className="value" style={{ color: '#ef4444' }}>
+                        ${results.stop_loss_price?.toFixed(2)}
+                      </span>
+                      <small>
+                        {results.risk_per_trade !== null && `${(results.risk_per_trade * 100).toFixed(1)}% from entry`}
+                      </small>
+                    </>
+                  )}
                 </div>
                 <div className="position-item">
-                  <label>Risk Amount</label>
-                  <span className="value">${results.position_risk_amount?.toFixed(2)}</span>
-                  <small>{(results.risk_per_trade * 100).toFixed(1)}% of ${accountSize.toLocaleString()} account</small>
+                  <label>Max Loss</label>
+                  <span className="value">
+                    ${results.position_risk_amount?.toFixed(2)}
+                  </span>
+                  <small>
+                    {actualRiskPct !== null
+                      ? `${actualRiskPct.toFixed(1)}% of $${tradeSize.toLocaleString()} trade`
+                      : ''}
+                  </small>
                 </div>
               </div>
               
@@ -544,7 +558,7 @@ export function TradingVerdict({ results, transactionCost, accountSize }: Tradin
                 </p>
               )}
               <p style={{ color: '#999', fontSize: '0.85em', marginTop: '1em', fontStyle: 'italic' }}>
-                Note: The trading pattern itself is valid. The issue is your account size relative to this stock's price and your risk tolerance.
+                The trading pattern is still valid. Increase your trade size to execute.
               </p>
             </div>
           )}
