@@ -101,29 +101,11 @@ export default function ResultsPage() {
   const [transactionCost, setTransactionCost] = useState<number>(0.001) // Default 0.1%
   const [tradeSize, setTradeSize] = useState<number>(10000) // Default $10,000
   const [riskTolerance, setRiskTolerance] = useState<number>(2) // Default 2%
-  const [debouncedTradeSize, setDebouncedTradeSize] = useState<number>(10000)
-  const [debouncedRiskTolerance, setDebouncedRiskTolerance] = useState<number>(2)
   const navigate = useNavigate()
 
   const handleNavigate = (ticker: string) => {
     navigate(`/results?ticker=${ticker}`)
   }
-
-  // Debounce trade size changes
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedTradeSize(tradeSize)
-    }, 800)
-    return () => clearTimeout(timer)
-  }, [tradeSize])
-
-  // Debounce risk tolerance changes
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedRiskTolerance(riskTolerance)
-    }, 800)
-    return () => clearTimeout(timer)
-  }, [riskTolerance])
 
   useEffect(() => {
     const fetchResults = async () => {
@@ -131,7 +113,7 @@ export default function ResultsPage() {
       try {
         setLoading(true)
         const response = await fetch(
-          `/api/analyze?ticker=${ticker}&period=5y&window_days=5&account_size=${debouncedTradeSize}&risk_per_trade=${debouncedRiskTolerance / 100}`
+          `/api/analyze?ticker=${ticker}&period=5y&window_days=5`
         )
         const data: AnalysisResult = await response.json()
         setResults(data)
@@ -142,7 +124,7 @@ export default function ResultsPage() {
       }
     }
     fetchResults()
-  }, [ticker, debouncedTradeSize, debouncedRiskTolerance])
+  }, [ticker])
 
   // Determine market regime description
   const getRegimeDescription = (): string => {
@@ -204,11 +186,6 @@ export default function ResultsPage() {
           </label>
           <small>
             Capital allocated to this trade
-            {tradeSize !== debouncedTradeSize && (
-              <span style={{ color: '#f59e0b', marginLeft: '0.5em' }}>
-                ⏳ Updating...
-              </span>
-            )}
           </small>
         </div>
 
@@ -227,11 +204,6 @@ export default function ResultsPage() {
           </label>
           <small>
             Stop loss trigger (% drawdown from entry, 100% = no stop loss)
-            {riskTolerance !== debouncedRiskTolerance && (
-              <span style={{ color: '#f59e0b', marginLeft: '0.5em' }}>
-                ⏳ Updating...
-              </span>
-            )}
           </small>
         </div>
         
@@ -563,7 +535,7 @@ export default function ResultsPage() {
 
       {/* UNIFIED TRADING VERDICT */}
       <div className="trading-verdict-section">
-        <TradingVerdict results={results} transactionCost={transactionCost} tradeSize={tradeSize} />
+        <TradingVerdict results={results} transactionCost={transactionCost} tradeSize={tradeSize} riskTolerance={riskTolerance / 100}/>
       </div>
 
       {/* DETAILED METRICS SECTION (Collapsible) */}

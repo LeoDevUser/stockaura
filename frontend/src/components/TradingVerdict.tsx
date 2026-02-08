@@ -6,30 +6,63 @@ interface TradingVerdictProps {
   results: AnalysisResult
   transactionCost: number
   tradeSize: number
+  riskTolerance: number
 }
 
-export function TradingVerdict({ results, transactionCost, tradeSize }: TradingVerdictProps) {
+export function TradingVerdict({ results, transactionCost, tradeSize, riskTolerance }: TradingVerdictProps) {
   if (!results.final_signal) return null
 
-  // Recalculate friction with user's transaction cost
+  // ============================================================================
+  // DYNAMIC POSITION SIZING CALCULATIONS (client-side, uses tradeSize prop)
+  // ============================================================================
+  
+  const riskPerTrade = riskTolerance
+  const noStopLoss = riskPerTrade >= 1.0
+  
+  // Calculate position sizing based on user's trade size
+  const suggestedShares = Math.floor(tradeSize / results.current)
+  const stopLossPrice = noStopLoss 
+    ? null 
+    : results.current * (1 - riskPerTrade)
+  const positionRiskAmount = tradeSize * riskPerTrade
+  const actualRiskPct = (positionRiskAmount / tradeSize) * 100
+  
+  // Position vs volume check
+  const positionValue = suggestedShares * results.current
+  const positionSizeVsVolume = results.avg_daily_volume 
+    ? positionValue / (results.avg_daily_volume * results.current)
+    : null
+
+  // Check if position is executable
+  const isSpeculativeSignal = results.final_signal.startsWith('SPEC_')
+  const effectiveShares = isSpeculativeSignal ? Math.floor(suggestedShares / 2) : suggestedShares
+  const canExecute = effectiveShares > 0
+  
+  // Generate position size note
+  let positionSizeNote = ''
+  if (!canExecute) {
+    const minNeeded = Math.ceil(results.current * (isSpeculativeSignal ? 2 : 1))
+    positionSizeNote = `Trade size too small. Minimum needed: $${minNeeded.toLocaleString()} (${isSpeculativeSignal ? '2 shares for half position' : '1 share'})`
+  } else if (isSpeculativeSignal) {
+    positionSizeNote = `⚠ SPECULATIVE SIGNAL: Position automatically halved to ${effectiveShares} shares due to lower statistical confidence (${results.predictability_score}/5 tests passed)`
+  }
+
+  // ============================================================================
+  // FRICTION & EDGE CALCULATIONS
+  // ============================================================================
+  
   const dynamicSlippage = results.estimated_slippage_pct ? results.estimated_slippage_pct / 100 : 0.0005
   const totalFriction = (dynamicSlippage + transactionCost) * 2
   const totalFrictionPct = totalFriction * 100
 
-  // Recalculate edge vs friction
   const expectedEdge = results.expected_edge_pct || 0
   const edgeRatio = totalFrictionPct > 0 ? expectedEdge / totalFrictionPct : 0
   const edgeCoversCosts = edgeRatio > 3
 
-  // Compute actual risk % from position_risk_amount / tradeSize
-  const actualRiskPct = (results.position_risk_amount && tradeSize > 0)
-    ? (results.position_risk_amount / tradeSize) * 100
-    : null
-
-  // Is this a "no stop loss" scenario (100% risk)?
-  const noStopLoss = results.risk_per_trade >= 1.0
-
-  // Signal configurations
+  // ============================================================================
+  // SIGNAL CONFIGURATION
+  // ============================================================================
+  
   const signalConfig: Record<string, {
     verdict: string
     action: string
@@ -218,7 +251,10 @@ export function TradingVerdict({ results, transactionCost, tradeSize }: TradingV
     summary: 'Unknown signal'
   }
 
-  // Determine why it failed
+  // ============================================================================
+  // FAILURE REASONS & VALIDATION
+  // ============================================================================
+  
   const failureReasons = []
   if (results.predictability_score < 2) {
     failureReasons.push({
@@ -500,13 +536,13 @@ export function TradingVerdict({ results, transactionCost, tradeSize }: TradingV
         <div className="position-details">
           <h4>Position Setup</h4>
           
-          {results.suggested_shares ? (
+          {canExecute ? (
             <>
               <div className="position-grid">
                 <div className="position-item">
                   <label>Entry</label>
-                  <span className="value">{results.suggested_shares} shares @ ${results.current?.toFixed(2)}</span>
-                  <small>Position: ${(results.suggested_shares * (results.current || 0)).toFixed(2)}</small>
+                  <span className="value">{effectiveShares} shares @ ${results.current?.toFixed(2)}</span>
+                  <small>Position: ${(effectiveShares * (results.current || 0)).toFixed(2)}</small>
                 </div>
                 <div className="position-item">
                   <label>Stop Loss</label>
@@ -518,31 +554,28 @@ export function TradingVerdict({ results, transactionCost, tradeSize }: TradingV
                   ) : (
                     <>
                       <span className="value" style={{ color: '#ef4444' }}>
-                        ${results.stop_loss_price?.toFixed(2)}
+                        ${stopLossPrice?.toFixed(2)}
                       </span>
-                      <small>
-                        {results.risk_per_trade !== null && `${(results.risk_per_trade * 100).toFixed(1)}% from entry`}
-                      </small>
+                      <small>{(riskPerTrade * 100).toFixed(1)}% from entry</small>
                     </>
                   )}
                 </div>
                 <div className="position-item">
                   <label>Max Loss</label>
                   <span className="value">
-                    ${results.position_risk_amount?.toFixed(2)}
+                    ${(effectiveShares * results.current * riskPerTrade).toFixed(2)}
                   </span>
                   <small>
-                    {actualRiskPct !== null
-                      ? `${actualRiskPct.toFixed(1)}% of $${tradeSize.toLocaleString()} trade`
-                      : ''}
+                    {actualRiskPct.toFixed(1)}% of ${tradeSize.toLocaleString()} trade
+                    {isSpeculative && ' (halved)'}
                   </small>
                 </div>
               </div>
               
-              {results.position_size_note && (
+              {positionSizeNote && (
                 <div className="position-note">
-                  <p style={{ color: '#f59e0b', fontSize: '0.9em', marginTop: '1em', lineHeight: '1.5' }}>
-                    💡 {results.position_size_note}
+                  <p style={{ color: isSpeculative ? '#f97316' : '#f59e0b', fontSize: '0.9em', marginTop: '1em', lineHeight: '1.5' }}>
+                    💡 {positionSizeNote}
                   </p>
                 </div>
               )}
@@ -552,9 +585,9 @@ export function TradingVerdict({ results, transactionCost, tradeSize }: TradingV
               <p style={{ color: '#ef4444', margin: '1em 0', fontSize: '1.1em' }}>
                 <strong>⚠ Cannot Execute Position</strong>
               </p>
-              {results.position_size_note && (
+              {positionSizeNote && (
                 <p style={{ color: '#d0d0d0', fontSize: '0.95em', lineHeight: '1.6', marginTop: '0.75em' }}>
-                  {results.position_size_note}
+                  {positionSizeNote}
                 </p>
               )}
               <p style={{ color: '#999', fontSize: '0.85em', marginTop: '1em', fontStyle: 'italic' }}>
@@ -623,8 +656,8 @@ export function TradingVerdict({ results, transactionCost, tradeSize }: TradingV
           </div>
           <div className="cost-item">
             <label>Position vs Volume</label>
-            <span className={results.position_size_vs_volume && results.position_size_vs_volume > 0.02 ? 'warning' : ''}>
-              {((results.position_size_vs_volume || 0) * 100).toFixed(3)}%
+            <span className={positionSizeVsVolume && positionSizeVsVolume > 0.02 ? 'warning' : ''}>
+              {((positionSizeVsVolume || 0) * 100).toFixed(3)}%
             </span>
           </div>
           <div className="cost-item">
