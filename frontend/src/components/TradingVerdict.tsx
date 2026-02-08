@@ -12,18 +12,20 @@ interface TradingVerdictProps {
 export function TradingVerdict({ results, transactionCost, tradeSize, riskTolerance }: TradingVerdictProps) {
   if (!results.final_signal) return null
 
-  // ============================================================================
-  // DYNAMIC POSITION SIZING CALCULATIONS (client-side, uses tradeSize prop)
-  // ============================================================================
-  
   const riskPerTrade = riskTolerance
   const noStopLoss = riskPerTrade >= 1.0
   
+  // Determine if this is a short signal
+  const isShortSignal = results.final_signal ? results.final_signal.includes('SHORT') : false
+
   // Calculate position sizing based on user's trade size
   const suggestedShares = Math.floor(tradeSize / results.current)
-  const stopLossPrice = noStopLoss 
-    ? null 
-    : results.current * (1 - riskPerTrade)
+  const stopLossPrice = noStopLoss
+    ? null
+    : isShortSignal
+      ? results.current * (1 + riskPerTrade)   // Short: stop ABOVE entry
+      : results.current * (1 - riskPerTrade)    // Long: stop BELOW entry
+
   const positionRiskAmount = tradeSize * riskPerTrade
   const actualRiskPct = (positionRiskAmount / tradeSize) * 100
   
@@ -556,7 +558,7 @@ export function TradingVerdict({ results, transactionCost, tradeSize, riskTolera
                       <span className="value" style={{ color: '#ef4444' }}>
                         ${stopLossPrice?.toFixed(2)}
                       </span>
-                      <small>{(riskPerTrade * 100).toFixed(1)}% from entry</small>
+					  <small>{(riskPerTrade * 100).toFixed(1)}% {isShortSignal ? 'above' : 'below'} entry</small>
                     </>
                   )}
                 </div>
