@@ -1185,7 +1185,10 @@ def generate_trading_signal(res):
                 else:
                     signal = 'BUY_UPTREND'
             else:
-                signal = 'BUY_MOMENTUM'
+                if z_ema is not None and z_ema > 1.0:
+                    signal = 'WAIT_PULLBACK'
+                else:
+                    signal = 'BUY_MOMENTUM'
         else:
             signal = 'WAIT_OR_SHORT_BOUNCE'
     
@@ -1202,7 +1205,10 @@ def generate_trading_signal(res):
                 else:
                     signal = 'SHORT_DOWNTREND'
             else:
-                signal = 'SHORT_MOMENTUM'
+                if z_ema is not None and z_ema < -1.0:
+                    signal = 'WAIT_SHORT_BOUNCE'
+                else:
+                    signal = 'SHORT_MOMENTUM'
         else:
             signal = 'WAIT_FOR_REVERSAL'
     
